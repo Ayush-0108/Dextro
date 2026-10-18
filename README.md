@@ -186,14 +186,15 @@ python -m datamind eval --paraphrases                   # score DataMind; writes
 During evaluation the item being scored is excluded from the few-shot examples (leave-one-out). A separate
 hold-out set ([template](eval/HOLDOUT_TEMPLATE.yaml)) is written by a teammate who never edits prompts.
 
-**Verified Results Summary:**
+**What has been verified so far** (2026-10-18). *Accuracy on the evaluation set has not been measured yet* — only
+one live question has run. This table will be replaced by per-tier accuracy from `eval/reports/`.
 
 | Metric / Test | Engine & Model | Result | Notes |
 |---|---|---|---|
-| **Full Automated Test Suite** | Offline pytest | **153 / 153 passed (100%)** | 6.42s execution time; compiler, validator, checks, Chinook |
-| **Gold SQL Equivalence** | Snowflake vs DuckDB SF1 | **52 / 52 matched (100%)** | `check-gold --independent duckdb` |
-| **Chinook Oracle Eval** | Local DuckDB | **22 / 22 passed (100%)** | `tests/test_chinook.py` oracle pipeline test |
-| **Live Smoke Test (Item s01)** | Snowflake + Ollama `gemma4:12b` | **PASS (100%)** | High confidence, report: `eval/reports/eval_20261018T141904.md` |
+| **Automated test suite** | Offline pytest | 153 / 153 passed | compiler, validator, number checks, harness, Chinook |
+| **Answer key (gold SQL) correctness** | Snowflake vs DuckDB SF1 | 52 / 52 matched | proves the *expected answers* are right, not DataMind's accuracy |
+| **Chinook harness check** | Local DuckDB, scripted test model | 22 / 22 | the test model replays gold SQL: proves the harness and model config work, *not* Gemma accuracy |
+| **First live question** | Snowflake + Ollama `gemma4:12b` | 1 question, correct, high confidence | smoke test only (218 s); `eval/reports/eval_20261018T141904.md` |
 
 ## Tests
 
@@ -213,7 +214,7 @@ the complete Chinook dataset test suite (model loading, role-playing joins, 22 g
 
 | # | Rubric Criterion | Pts | How DataMind Satisfies It |
 |---|---|:---:|---|
-| 1 | **Correctness & Usefulness** | 20 | 100% verified ground truth on 52 gold queries; dual-candidate reconciliation (compiled semantic plan + Gemma SQL) prevents hallucinations. |
+| 1 | **Correctness & Usefulness** | 20 | Evaluation harness with 52 gold queries verified on two engines; two independent queries cross-checked per answer to catch wrong ones. Accuracy: *not yet measured* (see Evaluation). |
 | 2 | **NL-to-Data Interaction** | 10 | Handles varied phrasing, filters, aggregations, multi-table joins, and conversation follow-ups. |
 | 3 | **Evidence & Explainability** | 15 | Every answer returns: executed Snowflake SQL, query ID, elapsed time, AST-based explanation, and cell-by-cell numerical fact-checking (green/blue/orange). |
 | 4 | **Meaningful Snowflake Depth** | 15 | Live Enterprise instance in Mumbai (`AWS_AP_SOUTH_1`), 3 RBAC roles (`ADMIN`, `AGENT`, `RESTRICTED`), Dynamic Data Masking on PII, warehouse credit monitors, and Time Travel before/after demo. |
@@ -253,7 +254,7 @@ many-to-one joins only where the target key is actually unique. See [docs/ADDING
 
 ## Known limitations
 
-- Accuracy on unseen questions is high but not perfect; that is why every answer carries a confidence level,
+- Accuracy has not been measured yet beyond a one-question smoke test; even when measured it won't be perfect, which is why every answer carries a confidence level,
   the cross-check, and the SQL. Low-confidence answers show the competing interpretations.
 - Ratios between groups, rankings within groups and comparisons against an average are not expressible as plans;
   those rely on Gemma's SQL plus the cross-check (the plan path reports itself as "not expressible").
