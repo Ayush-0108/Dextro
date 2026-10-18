@@ -22,7 +22,8 @@ def _tokens(s: str) -> set[str]:
 
 class ExampleStore:
     def __init__(self, items: list[dict[str, Any]]):
-        self.items = [i for i in items if i.get("gold_sql")]
+        # follow-up items ("and in 1997?") aren't standalone questions, so they make poor examples
+        self.items = [i for i in items if i.get("gold_sql") and not i.get("history")]
         self._tok = [_tokens(i["question"] + " " + " ".join(i.get("paraphrases", []))) for i in self.items]
 
     @classmethod

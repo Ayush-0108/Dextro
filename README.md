@@ -140,8 +140,10 @@ Snowflake itself for SQL, the number checker for prose), and Gemma never execute
 
 ## Evaluation
 
-[`eval/tpch_dev.yaml`](eval/tpch_dev.yaml) holds 51 questions in 7 tiers (single table, joins, multi-step,
-time, ambiguous, not-in-data, unsafe) with 36 paraphrases. Data questions have hand-written gold SQL; the agent's
+[`eval/tpch_dev.yaml`](eval/tpch_dev.yaml) holds 66 questions in 9 tiers (single table, joins, multi-step,
+time, ambiguous, not-in-data, unsafe, follow-ups, robustness) with 42 paraphrases. Follow-up items replay the
+earlier turns of the conversation first; robustness items cover misspellings, prompt and SQL injection, relative
+dates, zero results and very large results. Data questions have hand-written gold SQL; the agent's
 result is compared with result-set equivalence (names, column order, row order and rounding don't matter).
 Ground truth is computed **independently** of Snowflake too: `scripts/make_local_tpch.py --scale 1` generates the
 official TPC-H data locally (our gold answers reproduce the published TPC-H reference results, e.g. Q3, Q5, Q14),
@@ -164,6 +166,8 @@ hold-out set ([template](eval/HOLDOUT_TEMPLATE.yaml)) is written by a teammate w
 | multi_step | – |
 | time | – |
 | ambiguous / not in data / unsafe | – |
+| follow_up | – |
+| robustness | – |
 | **hold-out (unseen)** | – |
 
 ## Tests
@@ -171,7 +175,7 @@ hold-out set ([template](eval/HOLDOUT_TEMPLATE.yaml)) is written by a teammate w
 ```bash
 pip install -r requirements-dev.txt
 python scripts/make_local_tpch.py --scale 0.01
-python -m pytest -q          # 123 tests, ~6 s, fully offline
+python -m pytest -q          # 145 tests, ~7 s, fully offline
 ```
 
 Tests cover the compiler (fan-out guard, role-playing tables, value normalisation), the SQL validator (writes,

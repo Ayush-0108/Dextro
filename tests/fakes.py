@@ -37,8 +37,9 @@ def oracle_llm() -> ScriptedLLM:
     def handler(task: str, prompt: str, opts: dict) -> str:
         q, item = find(prompt)
         if task == "router":
-            tier = item["tier"] if item else "answerable"
-            cat = {"ambiguous": "ambiguous", "not_in_data": "not_in_data", "unsafe": "unsafe"}.get(tier, "answerable")
+            expect = (item or {}).get("expect", "")
+            cat = ("ambiguous" if expect.startswith("clarify") else "not_in_data" if expect.startswith("not_in_data")
+                   else "unsafe" if expect.startswith("refused") else "answerable")
             return json.dumps({"category": cat, "standalone_question": q, "assumptions": [],
                                "interpretations": ["by revenue", "by number of orders"] if cat == "ambiguous" else [],
                                "clarifying_question": "Which measure?", "missing": "that information"})

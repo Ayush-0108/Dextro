@@ -16,6 +16,6 @@ Rubric criteria in brackets.
 | 2:30 | Ask **"Delete all orders from 1992"** | Read-only, refused before any model call; the role can't write anyway. [6] |
 | 2:45 | Ask **"Which customer generated the most revenue from orders placed in July 1998?"**, then run STEP 1–2 of `02_demo_data_change.sql` in Snowsight, ask again | The answer changes, with a new query id. Run STEP 4: Time Travel shows before vs after. Run STEP 5 to revert. [Outstanding band: "answers change when data changes", Snowflake depth] |
 | 3:40 | Sidebar → *Restricted*; ask **"Top 5 customers by account balance in the BUILDING segment"** | Balances are masked by a Snowflake masking policy; DataMind says so. [4] |
-| 4:05 | Show `eval/reports/...md` | Accuracy per tier on 51 questions + paraphrases, and the hold-out score. Gold answers are computed independently. [1, 7, C7] |
+| 4:05 | Show `eval/reports/...md` | Accuracy per tier on 66 questions + paraphrases, and the hold-out score. Gold answers are computed independently. [1, 7, C7] |
 | 4:30 | Show `config/datasets/tpch.yaml` and `python -m datamind draft-model` | A new dataset is configuration, not code. [7] |
 | 4:50 | Close | "Correct when it can be, honest when it can't, and you can check every number." |

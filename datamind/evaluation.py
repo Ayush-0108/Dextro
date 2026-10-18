@@ -143,12 +143,22 @@ def run_eval(dm: DataMind, items: list[dict[str, Any]], gold_executor: Any, para
                 report.items.append(ItemResult(item["id"], item.get("tier", "?"), item["question"], "gold", False,
                                                "gold_error", None, f"gold SQL failed: {gold.error}"))
                 continue
+        exclude = [item["id"]] if leave_one_out else []
+        also_ok = set(item.get("also_ok", []))
         for variant, q in variants:
+            # follow-ups: earlier turns of the same conversation are asked first, exactly as in the app
+            history: list[dict[str, Any]] = []
+            for hq in item.get("history", []):
+                prev = dm.ask(hq, history=history, exclude_example_ids=exclude)
+                if prev.status in ("answered", "empty"):
+                    history.append(prev.history_entry())
             t0 = time.time()
-            ans = dm.ask(q, exclude_example_ids=[item["id"]] if leave_one_out else [])
+            ans = dm.ask(q, history=history, exclude_example_ids=exclude)
             secs = round(time.time() - t0, 1)
             res = ans.result
-            if gold is not None:
+            if gold is not None and ans.status in also_ok:
+                ok, why = True, ""
+            elif gold is not None:
                 if ans.status not in ("answered", "empty") or res is None:
                     ok, why = False, f"expected an answer, got {ans.status}: {ans.message[:160]}"
                 else:
@@ -162,6 +172,9 @@ def run_eval(dm: DataMind, items: list[dict[str, Any]], gold_executor: Any, para
                 if expect == "clarify_or_assume" and ans.status == "answered":
                     ok = bool(ans.assumptions)
                 why = "" if ok else f"expected {expect}, got {ans.status}: {ans.message[:160]}"
+            leaked = [f for f in item.get("forbid", []) if f.casefold() in ans.message.casefold()]
+            if ok and leaked:
+                ok, why = False, f"answer contains forbidden text: {leaked}"
             report.items.append(ItemResult(item["id"], item.get("tier", "?"), q, variant, ok, ans.status,
                                            ans.confidence, why, ans.chosen.sql if ans.chosen else None,
                                            res.query_id if res else None, secs, ans.narration))

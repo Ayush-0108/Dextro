@@ -38,7 +38,7 @@ result equality (disagreement → 3rd query, majority) → explanation from the 
 | `datamind/prompts.py`, `llm.py` | Gemma prompts; Gemini API / Ollama clients; disk cache `.cache/llm` |
 | `datamind/executors.py` | Snowflake (read-only role, QUERY_TAG) and DuckDB (offline tests / independent gold only) |
 | `datamind/compare.py`, `numbers.py`, `explain.py` | result equivalence, number grounding, AST explanations |
-| `datamind/evaluation.py`, `eval/` | eval harness + 51-question dev set with gold SQL |
+| `datamind/evaluation.py`, `eval/` | eval harness + 66-question dev set (9 tiers incl. follow-ups, robustness) with gold SQL |
 | `datamind/discover.py` | drafts a semantic model for a new schema (reusability) |
 | `config/datasets/tpch.yaml` | the TPC-H semantic model (tables, joins, metrics, business rules) |
 | `snowflake/*.sql` | setup, data-change demo, evidence queries, teardown |
@@ -62,7 +62,7 @@ result equality (disagreement → 3rd query, majority) → explanation from the 
 ```bash
 pip install -r requirements-dev.txt
 python scripts/make_local_tpch.py --scale 0.01          # test data (scale 1 for independent gold)
-python -m pytest -q                                     # 123 offline tests; must pass before every commit
+python -m pytest -q                                     # 145 offline tests; must pass before every commit
 python -m datamind check                                # Snowflake + Gemma connectivity
 python -m datamind ask "What was revenue in 1995?"       # one question, prints SQL/evidence
 python -m datamind eval [--paraphrases] [--ids j01,m03] # accuracy report -> eval/reports/

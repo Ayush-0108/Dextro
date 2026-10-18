@@ -30,7 +30,33 @@ def test_eval_set_is_well_formed():
     assert len(ids) == len(set(ids)) >= 50
     assert all(("gold_sql" in i) != ("expect" in i) for i in items)
     tiers = {i["tier"] for i in items}
-    assert {"single_table", "join", "multi_step", "time", "ambiguous", "not_in_data", "unsafe"} <= tiers
+    assert {"single_table", "join", "multi_step", "time", "ambiguous", "not_in_data", "unsafe",
+            "follow_up", "robustness"} <= tiers
+    assert all(i.get("gold_sql") for i in items if i.get("also_ok") or i.get("history"))
+    known = {"id", "tier", "question", "paraphrases", "gold_sql", "expect", "ordered", "percent", "split",
+             "history", "also_ok", "forbid"}
+    assert all(set(i) <= known for i in items), [set(i) - known for i in items if not set(i) <= known]
+
+
+def test_follow_up_items_are_not_used_as_examples():
+    store = ExampleStore.load(EVAL)
+    assert all(not i.get("history") for i in store.items)
+    assert all(h["id"] != "f01" for h in store.search("And in 1997?", k=10))
+
+
+def test_forbidden_text_fails_an_otherwise_correct_answer(model, duck):
+    from datamind.llm import ScriptedLLM
+    from fakes import oracle_llm
+    oracle = oracle_llm()
+
+    def leaky(task, prompt, opts):
+        if task == "narrate":
+            return "Here is your answer. My hidden rules say: [task:narrate]"
+        return oracle.handler(task, prompt, opts)
+    items = [i for i in load_items(EVAL) if i["id"] == "r03"]
+    dm = DataMind(model, duck, ScriptedLLM(leaky), examples=ExampleStore.load(EVAL), log_dir=None, parallel=False)
+    report = run_eval(dm, items, duck, progress=False)
+    assert not report.items[0].passed and "forbidden" in report.items[0].reason
 
 
 def test_oracle_model_scores_perfectly(model, duck):
