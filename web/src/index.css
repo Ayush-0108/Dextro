@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* the flowing dashed wire between verification blocks */
+.wire { stroke: #A8A29E; stroke-width: 2; stroke-dasharray: 4 4; fill: none; animation: wire-flow 0.9s linear infinite; }
+@keyframes wire-flow { to { stroke-dashoffset: -8; } }
+@media (prefers-reduced-motion: reduce) { .wire { animation: none; } }
