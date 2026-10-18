@@ -56,6 +56,8 @@ class GemmaAPI(LLM):
         self.client = client
         self._fold_system = False       # set if the API rejects system instructions for this model
         self._thinking_config = True    # set to False if the model rejects thinking settings
+        # measured, not assumed: free-tier limits are recorded in every eval report (audit C5)
+        self.stats = {"requests": 0, "rate_limited": 0, "waited_s": 0.0}
 
     def complete(self, prompt: str, system: str | None = None, temperature: float = 0.0,
                  thinking: bool = False, json_mode: bool = False, sample: int = 0) -> str:
@@ -72,6 +74,7 @@ class GemmaAPI(LLM):
             if self._thinking_config:
                 cfg["thinking_config"] = types.ThinkingConfig(thinking_level="high" if thinking else "minimal")
             try:
+                self.stats["requests"] += 1
                 resp = self.client.models.generate_content(
                     model=self.model, contents=contents, config=types.GenerateContentConfig(**cfg))
                 text = resp.text or ""
@@ -89,7 +92,11 @@ class GemmaAPI(LLM):
                     continue
                 if not any(s in low for s in _RETRYABLE) or attempt == self.max_retries - 1:
                     raise LLMError(f"Gemma API call failed: {last[:300]}") from e
-                time.sleep(min(60.0, max(delay, _retry_delay(last))))
+                wait = min(60.0, max(delay, _retry_delay(last)))
+                if "429" in low or "resource_exhausted" in low:
+                    self.stats["rate_limited"] += 1
+                self.stats["waited_s"] = round(self.stats["waited_s"] + wait, 1)
+                time.sleep(wait)
                 delay *= 2
         raise LLMError(f"Gemma API call failed after {self.max_retries} attempts: {last[:300]}")
 
@@ -113,7 +120,7 @@ def _retry_delay(message: str) -> float:
 
 class GemmaOllama(LLM):
     def __init__(self, model: str | None = None, host: str | None = None, timeout: float = 300):
-        self.model = require_gemma(model or os.getenv("GEMMA_MODEL", "gemma4:26b"))
+        self.model = require_gemma(model or os.getenv("GEMMA_MODEL", "gemma4:12b"))
         self.host = (host or os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
         self.name = f"ollama:{self.model}"
         self.timeout = timeout
@@ -148,6 +155,10 @@ class CachedLLM(LLM):
         self.enabled = enabled
         self.hits = 0
         self.calls = 0
+
+    @property
+    def stats(self) -> dict[str, Any]:
+        return {"cache_hits": self.hits, "model_calls": self.calls, **getattr(self.inner, "stats", {})}
 
     def complete(self, prompt: str, system: str | None = None, temperature: float = 0.0,
                  thinking: bool = False, json_mode: bool = False, sample: int = 0) -> str:

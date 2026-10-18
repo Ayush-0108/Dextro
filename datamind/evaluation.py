@@ -168,6 +168,13 @@ def run_eval(dm: DataMind, items: list[dict[str, Any]], gold_executor: Any, para
             if progress:
                 print(f"{'PASS' if ok else 'FAIL'} {item['id']:<6} {variant:<12} {ans.status:<12} "
                       f"{(ans.confidence or ''):<6} {secs:>5}s  {q[:70]}", flush=True)
+    stats = getattr(dm.llm, "stats", None)
+    if stats:
+        report.meta["gemma_usage"] = ", ".join(f"{k}={v}" for k, v in stats.items())
+    secs = sorted(r.seconds for r in report.items if r.variant != "gold")
+    if secs:
+        report.meta["latency_s"] = (f"median {secs[len(secs) // 2]}, p90 {secs[int(len(secs) * 0.9)]}, "
+                                    f"max {secs[-1]}")
     return report
 
 

@@ -97,3 +97,11 @@ def test_client_gets_a_timeout(monkeypatch):
 def test_only_gemma_models_are_accepted():
     with pytest.raises(ValueError):
         GemmaAPI(model="gemini-2.5-pro", client=object())
+
+
+def test_usage_is_recorded_for_rate_limit_measurement(no_sleep):
+    from datamind.llm import CachedLLM
+    g, _ = api([Exception("429 RESOURCE_EXHAUSTED {'retryDelay': '5s'}"), "ok"])
+    c = CachedLLM(g, enabled=False)
+    c.complete("q")
+    assert c.stats == {"cache_hits": 0, "model_calls": 1, "requests": 2, "rate_limited": 1, "waited_s": 5.0}

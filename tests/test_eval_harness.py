@@ -39,7 +39,7 @@ def test_oracle_model_scores_perfectly(model, duck):
     report = run_eval(dm, items, duck, paraphrases=True, progress=False)
     fails = [(r.id, r.variant, r.reason) for r in report.items if not r.passed]
     assert fails == [], fails
-    assert "Overall" in report.markdown()
+    assert "Overall" in report.markdown() and "latency_s" in report.markdown()
 
 
 def test_leave_one_out_excludes_own_gold():
