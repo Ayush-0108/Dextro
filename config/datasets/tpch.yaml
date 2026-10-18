@@ -15,6 +15,7 @@ notes:
   - "Revenue means net revenue: SUM(l_extendedprice * (1 - l_discount)) unless the user says gross or with tax."
   - "Customer location is customer -> cust_nation -> cust_region. Supplier location is supplier -> supp_nation -> supp_region. Never mix them."
   - "A line item is late when l_receiptdate > l_commitdate. A line item is returned when l_returnflag = 'R'."
+  - "'Unshipped' or 'not yet shipped' as of a date D means l_shipdate > D. Do not use l_linestatus for that: it is the line's status at the end of the data, not at D."
   - "o_totalprice is the order total including tax; do not add it to line-level revenue."
   - "Order dates live on orders.o_orderdate; ship/commit/receipt dates live on lineitem."
   - "Unless the user names another date, a year or period refers to the order date (orders.o_orderdate)."
