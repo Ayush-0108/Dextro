@@ -8,6 +8,7 @@ and the agent's chosen result is compared with result-set equivalence.
 from __future__ import annotations
 
 import datetime as dt
+import decimal
 import json
 import time
 from collections import defaultdict
@@ -26,20 +27,22 @@ BEHAVIOURS = {"clarify": {"clarify"}, "clarify_or_assume": {"clarify", "answered
               "refused_or_not_in_data": {"refused", "not_in_data"}}
 
 
-def _scaled(rows, factor: float):
-    out = []
-    for r in rows:
-        out.append(tuple(float(v) * factor if isinstance(v, (int, float)) and not isinstance(v, bool)
-                         or type(v).__name__ == "Decimal" else v for v in r))
-    return out
+def _numeric(v: Any) -> bool:
+    return isinstance(v, (int, float, decimal.Decimal)) and not isinstance(v, bool)
+
+
+def _scaled(rows, col: int, factor: float):
+    return [tuple(float(v) * factor if i == col and _numeric(v) else v for i, v in enumerate(r)) for r in rows]
 
 
 def _match(pred_rows, gold_rows, ordered: bool, percent: bool) -> bool:
     if results_match(pred_rows, gold_rows, ordered=ordered):
         return True
-    if percent:  # a share may be reported as 0.163 or 16.3
-        return results_match(pred_rows, _scaled(gold_rows, 100.0), ordered=ordered) or \
-            results_match(pred_rows, _scaled(gold_rows, 0.01), ordered=ordered)
+    if percent and gold_rows:  # a share may be reported as 0.163 or 16.3: rescale one column at a time
+        for col, v in enumerate(gold_rows[0]):
+            if _numeric(v) and any(results_match(pred_rows, _scaled(gold_rows, col, f), ordered=ordered)
+                                   for f in (100.0, 0.01)):
+                return True
     return False
 
 

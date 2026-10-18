@@ -13,8 +13,9 @@ import itertools
 import math
 from typing import Any, Sequence
 
-REL_TOL = 1e-4
-ABS_TOL = 0.0051   # tolerates rounding to 2 decimals
+REL_TOL = 1e-9    # engines differ only by floating point noise; anything larger is a different answer
+ABS_TOL = 0.0051  # tolerates rounding to 2 decimals (cents) for amounts >= 1
+MIN_SIG_DIGITS = 4  # a rounded value must keep this many significant digits to count as the same number
 
 
 def norm(v: Any) -> Any:
@@ -38,14 +39,37 @@ def norm(v: Any) -> Any:
     return str(v)
 
 
+def _decimals(x: float) -> int | None:
+    r = repr(x)
+    if "e" in r or "E" in r:
+        return None
+    return len(r.split(".")[1].rstrip("0")) if "." in r else 0
+
+
+def _sig_digits(x: float) -> int:
+    return len(repr(abs(x)).replace(".", "").lstrip("0").rstrip("0"))
+
+
+def _is_rounding_of(rounded: float, precise: float) -> bool:
+    """True if `rounded` is `precise` rounded to the decimals `rounded` shows, keeping enough digits."""
+    d, dp = _decimals(rounded), _decimals(precise)
+    if d is None or dp is None or d >= dp or _sig_digits(rounded) < MIN_SIG_DIGITS:
+        return False
+    return math.isclose(round(precise, d), rounded, rel_tol=1e-12, abs_tol=1e-15)
+
+
 def values_equal(a: Any, b: Any) -> bool:
     if a is None or b is None:
         return a is None and b is None
     if isinstance(a, float) and isinstance(b, float):
-        if math.isclose(a, b, rel_tol=REL_TOL, abs_tol=1e-9):
+        if a.is_integer() and b.is_integer():
+            return a == b   # counts and keys: exact
+        if math.isclose(a, b, rel_tol=REL_TOL, abs_tol=1e-12):
             return True
         # tolerate rounding to cents only for amounts, never for small fractions like rates
-        return max(abs(a), abs(b)) >= 1 and abs(a - b) <= ABS_TOL
+        if max(abs(a), abs(b)) >= 1 and abs(a - b) <= ABS_TOL:
+            return True
+        return _is_rounding_of(a, b) or _is_rounding_of(b, a)
     if isinstance(a, float) != isinstance(b, float):
         return False
     return str(a).casefold() == str(b).casefold()

@@ -215,6 +215,29 @@ def test_compare_is_strict_on_small_fractions():
     assert results_match([(0.00185547,)], [(0.0018554695,)])
 
 
+def test_compare_is_exact_for_counts_and_tight_for_sums():
+    assert not results_match([(150000,)], [(149990,)])
+    assert not results_match([(Decimal("150000"),)], [(149999.0,)])
+    assert results_match([(150000.0,)], [(Decimal("150000"),)])
+    assert not results_match([(1_500_000_000.0,)], [(1_500_100_000.0,)])
+    assert not results_match([(1_234_567.0,)], [(1_234_567.89,)])        # whole-dollar rounding of cents is a miss
+    assert results_match([(1_234_567.89,)], [(Decimal("1234567.8912"),)])  # rounding to cents is fine
+    assert results_match([(3.141592653589793,)], [(3.1415926535897936,)])  # engine float noise
+
+
+def test_compare_rejects_coarse_rounding_of_rates():
+    assert results_match([(0.1834,)], [(0.18341234,)])  # 4 significant digits kept
+    assert not results_match([(0.18,)], [(0.18341234,)])
+    assert not results_match([(0.2,)], [(0.18341234,)])
+
+
+def test_percent_rescaling_only_touches_one_column():
+    from datamind.evaluation import _match
+    gold = [(1995, Decimal("0.1634")), (1996, Decimal("0.1702"))]
+    assert _match([(1995, 16.34), (1996, 17.02)], gold, ordered=False, percent=True)
+    assert not _match([(1995, 16.34), (1996, 17.02)], gold, ordered=False, percent=False)
+
+
 def test_compare_is_independent_of_row_order_for_close_values():
     import random
     rows = [("A", 0.0500813), ("N", 0.0477586), ("O", 0.0499311), ("R", 0.0498275)]
