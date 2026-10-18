@@ -30,9 +30,17 @@ semantic model with verified joins/metrics, compiled plans, two independent quer
 deterministic explanations, number-level grounding, and an evaluation harness with an honest hold-out set.
 
 ## 2026-10-18 — implementation choices
-- Gemma 4 31B via Gemini API by default; Ollama `gemma4:26b` as a local alternative.
+- Gemma 4 31B via Gemini API by default; Ollama `gemma4:12b` as the local alternative (26B is too tight on
+  the team's 16 GB M5 MacBook; changed 2026-10-18).
 - No Cortex (keeps the central AI task on Gemma).
 - TPC-H SF1 copied from `SNOWFLAKE_SAMPLE_DATA` into `DATAMIND_DB.TPCH` (needed for masking policies and the
   data-change demo; shared data is read-only).
 - Independent ground truth from locally generated TPC-H (tpchgen-cli); verified against published TPC-H answers.
 - Python backend (sqlglot, Snowflake connector, pydantic) + Streamlit UI, chosen for speed of build and tooling.
+
+## 2026-10-18 — Snowflake sign-in: password on trials, key pair as an option
+Snowflake's MFA rollout (phases through Oct 2026) does not apply to trial accounts, which keep single-factor
+password sign-in ([docs](https://docs.snowflake.com/en/user-guide/security-mfa-rollout)). So the quick start uses
+the judge's own trial login + password (no key generation), while the app still queries only as `DATAMIND_AGENT`
+with secondary roles off. Key-pair sign-in for the `TYPE = SERVICE` user `DATAMIND_APP` stays supported for
+non-trial accounts and long-lived deployments.

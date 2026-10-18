@@ -1,4 +1,7 @@
-# DataMind — verified answers from your Snowflake data
+# Dextro — DataMind
+
+**Verified answers from your Snowflake data.** *Dextro* is our team and repository; *DataMind* is the product
+(the PS1 track name), used throughout the code and docs.
 
 [![tests](https://github.com/ZERODAY-2026/Dextro/actions/workflows/tests.yml/badge.svg)](https://github.com/ZERODAY-2026/Dextro/actions/workflows/tests.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -57,7 +60,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Quick start
 
-Prerequisites: Python 3.11+, a Snowflake account (the free 30-day trial works — pick **Enterprise** edition at
+Prerequisites: Python 3.11–3.13 (tested on 3.12; if your Mac has 3.14, use `uv venv --python 3.12`), a Snowflake account (the free 30-day trial works — pick **Enterprise** edition at
 sign-up), and a free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) (or Ollama locally).
 
 ```bash
@@ -69,17 +72,21 @@ pip install -r requirements.txt
 1. **Snowflake** — open a Snowsight SQL worksheet as ACCOUNTADMIN and run [`snowflake/01_setup.sql`](snowflake/01_setup.sql)
    top to bottom (about 2 minutes). It creates an X-Small warehouse with auto-suspend and a daily credit cap,
    three roles, the `DATAMIND_DB.TPCH` schema (copied from Snowflake's TPC-H sample data), masking policies and read-only grants.
-   It also creates the read-only `DATAMIND_APP` service user the app signs in as.
-2. **Configure** — `python scripts/make_keypair.py` creates `keys/rsa_key.p8` (git-ignored) and prints an
-   `ALTER USER DATAMIND_APP SET RSA_PUBLIC_KEY = ...` statement: run it once in Snowsight. Then
-   `cp .env.example .env` and fill in `SNOWFLAKE_ACCOUNT` and `GEMINI_API_KEY`. The app user is a
-   `TYPE = SERVICE` user with key-pair sign-in, so Snowflake's MFA requirement for people doesn't block it.
+   It also grants the read-only agent roles to you, and creates an optional `DATAMIND_APP` service user.
+2. **Configure** — `cp .env.example .env` and fill in `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PASSWORD`
+   (your own trial login) and `GEMINI_API_KEY`. Password sign-in works on trial accounts, which are
+   [exempt from Snowflake's MFA rollout](https://docs.snowflake.com/en/user-guide/security-mfa-rollout). The app
+   still runs every query as the SELECT-only `DATAMIND_AGENT` role with secondary roles off, so your admin rights
+   never apply. *On a non-trial account, or for a long-lived deployment,* use key-pair sign-in instead:
+   `python scripts/make_keypair.py` writes `keys/rsa_key.p8` (git-ignored) and prints an
+   `ALTER USER DATAMIND_APP SET RSA_PUBLIC_KEY = ...` to run once in Snowsight; then set option B in `.env`.
 3. **Check** — `python -m datamind check` runs one query in Snowflake and one Gemma call.
 4. **Run the app** — `streamlit run app/streamlit_app.py`
 5. **Or the CLI** — `python -m datamind ask "What was revenue by customer region in 1996?"`
 
-Local Gemma instead of the API: install [Ollama](https://ollama.com), `ollama pull gemma4:26b` (about 18 GB download;
-needs ~16 GB RAM, or use `gemma4:12b`), then set `GEMMA_BACKEND=ollama` and `GEMMA_MODEL=gemma4:26b`.
+Local Gemma instead of the API: install [Ollama](https://ollama.com), `ollama pull gemma4:12b` (about 8 GB; fits a
+16 GB laptop — `gemma4:26b` needs ~18 GB and is too tight there), then set `GEMMA_BACKEND=ollama` and
+`GEMMA_MODEL=gemma4:12b`. Expect lower accuracy than the 31B model on the API; our reported numbers use the API.
 
 ### Configuration
 
@@ -124,7 +131,7 @@ Cortex is not used: model inference is Gemma's job, kept separate from data stor
 
 ## How Gemma is used
 
-Gemma 4 (default `gemma-4-31b-it` via the Gemini API; `gemma4:26b` via Ollama) performs the central AI tasks:
+Gemma 4 (default `gemma-4-31b-it` via the Gemini API; `gemma4:12b` via Ollama on a 16 GB laptop) performs the central AI tasks:
 classifying and rewriting questions, producing structured query plans, writing and repairing Snowflake SQL, and
 writing the final answer. Every Gemma output is validated before use (JSON schema for plans, the SQL validator and
 Snowflake itself for SQL, the number checker for prose), and Gemma never executes anything. See

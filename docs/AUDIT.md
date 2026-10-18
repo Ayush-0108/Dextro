@@ -23,21 +23,21 @@ security gap a judge could find · **Medium** = robustness, UX or honesty gap ·
 | A3 | High | numbers | A number echoed from the question counts as verified "context" → "Was revenue 300 million?" → "Yes, 300 million" passes | fixed `9e058e1` |
 | B1 | High | compiler | Model-supplied HAVING / numeric filter values rendered raw into SQL (injection of SQL fragments) | fixed `1a2364a` |
 | B2 | High | validator | Table functions (`TABLE(INFORMATION_SCHEMA.QUERY_HISTORY())`, `TABLE(GENERATOR(...))`) and Cortex calls (`SNOWFLAKE.CORTEX.COMPLETE`) pass validation | fixed `842e5c4` |
-| C1 | High | Snowflake auth | Password-only sign-in for a non-SERVICE user is likely blocked by Snowflake's MFA rollout → app can't connect (_verify live_) | open |
+| C1 | High | Snowflake auth | Password-only sign-in for a non-SERVICE user is likely blocked by Snowflake's MFA rollout → app can't connect (_verify live_) | revised: password on trials (exempt per Snowflake docs), key pair optional |
 | A4 | Medium | numbers | Numbers like `2.5x` and the second year in `1994-1996` are not checked; the "derived" pool (all pairwise ratios/differences of ≤60 cells) is large enough that random numbers can pass | fixed `9e058e1` |
 | A5 | Medium | compiler | Month/quarter/week filters compile to `DATE_TRUNC('MONTH', d) = '1995-03'` → runtime error | fixed `1a2364a` |
 | A7 | Medium | pipeline | Two empty results "agree" → reported as high confidence | fixed `8400e28` |
 | B3 | Medium | validator | Cartesian joins (`LINEITEM a, LINEITEM b`) and `FETCH FIRST n` pass; only the 120 s timeout stops them | fixed `842e5c4` |
 | B4 | Medium | guard | Write-intent regex refuses "Update me on revenue…", "Drop the decimals…"; misses "Remove all customers…", "Set every discount to zero" | fixed `842e5c4` |
 | C2 | Medium | executor | Snowflake connection cached forever, no keep-alive or reconnect → fails after the session expires during judging | fixed `fa3dec2` |
-| C3 | Medium | LLM | Gemini calls have no timeout; 429 retries ignore the server's retry delay; 4096-token output budget shared with thinking | code fixed `2093e81`; verify live |
-| C4 | Medium | LLM | Gemma on the Gemini API has historically rejected `system_instruction`; no fallback (_verify live_) | code fixed `2093e81`; verify live |
-| C5 | Medium | LLM | Free-tier rate limits vs 3–6 calls/question with a ~3k-token schema in each prompt (_verify live_) | open |
+| C3 | Medium | LLM | Gemini calls have no timeout; 429 retries ignore the server's retry delay; 4096-token output budget shared with thinking | fixed `2093e81`; matches Google docs; verify live |
+| C4 | Medium | LLM | Gemma on the Gemini API has historically rejected `system_instruction`; no fallback (_verify live_) | Google docs: system_instruction supported; fallback kept as defence |
+| C5 | Medium | LLM | Free-tier rate limits vs 3–6 calls/question with a ~3k-token schema in each prompt (_verify live_) | instrumented: eval reports record requests, 429s, wait, latency; measure on first run |
 | C6 | Medium | app | Streamlit shares one executor across sessions; switching role is global | fixed `fa3dec2` |
 | D1 | Medium | eval | Dev set doubles as the few-shot library; leave-one-out removes only the item itself, so near-duplicates leak → dev accuracy is optimistic | open |
 | D3 | Medium | governance | Aggregates over masked columns (e.g. `AVG(c_acctbal)` as restricted role) return NULL but aren't flagged as masked | fixed `8400e28` |
 | E1 | Medium | process | Guide PDF unread; README results table empty; eval never run on real Gemma; no hold-out file | open |
-| E2 | Medium | docs | Python version (new Macs ship 3.14; pins tested 3.11–3.13); `gemma4:12b` likely not a real tag; test time "~6 s" is ~18 s | open |
+| E2 | Medium | docs | Python version (new Macs ship 3.14; pins tested 3.11–3.13); `gemma4:12b` exists on Ollama (~8 GB; my doubt was wrong); test time "~6 s" is ~18 s | fixed (README, Python note, 12b) |
 | A6 | Low | compiler | Negative `limit` → invalid SQL; non-numeric year (e.g. "FY95") → bare `ValueError` | fixed `1a2364a` |
 | D2 | Low | eval | `percent: true` rescaling multiplies every numeric column (years too) → false failures | fixed `a2e20f6` |
 | E4 | Low | discover | `draft-model` builds SQL from unquoted identifiers; `--out` treats Windows absolute paths as relative | open |
@@ -187,3 +187,12 @@ Still open: C1 and C5 (Phase 1, live), D1 (reporting), E1, E2, E4.
 2. **Live-robustness code with fakes (offline, now):** C2, C3, C4, C6.
 3. **Phase 1 with you:** C1 (key-pair service user), then C3–C5 verified on the real API; E2 docs.
 4. **Phase 2:** D1 reporting; first real eval.
+
+## Update 2026-10-18 (session 3) — external docs checked
+- **C1:** Snowflake's MFA rollout does not apply to trial accounts ("The phases described in this topic don't apply
+  to reader accounts, trial accounts, or Snowflake Postgres."). My finding overstated the risk for trials. The quick
+  start now uses password sign-in; key-pair for `DATAMIND_APP` (TYPE = SERVICE) remains for non-trial accounts.
+- **C3/C4:** Google's Gemma-on-Gemini-API page lists `gemma-4-31b-it` and `gemma-4-26b-a4b-it`, shows
+  `system_instruction`, and thinking via `ThinkingConfig(thinking_level="high" | "minimal")`. Our client uses exactly
+  these. The system-instruction fallback stays as harmless defence. Still unverified until the first live call.
+- **E2:** `gemma4:12b` is a real Ollama tag (7.7–8.0 GB); it is now the documented local fallback.
