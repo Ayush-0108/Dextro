@@ -25,6 +25,35 @@ export interface Answer {
   narration: string; timings: Record<string, number>; model: string; engine: string; role: string | null;
   result: QueryResult | null; history_entry: HistoryEntry;
 }
-export interface Dataset { id: string; path: string; title: string; coverage: string; tables: number; sample_questions: string[] }
+export interface EntityColumn {
+  name: string;
+  type: string;
+  description?: string;
+  values?: string[];
+  synonyms?: string[];
+}
+export interface Entity {
+  alias: string;
+  table: string;
+  description?: string;
+  primary_key?: string[];
+  columns: EntityColumn[];
+}
+export interface Metric {
+  name: string;
+  formula: string;
+  description?: string;
+}
+export interface Dataset {
+  id: string;
+  path: string;
+  title: string;
+  coverage: string;
+  tables: number;
+  sample_questions: string[];
+  description?: string;
+  entities?: Entity[];
+  metrics?: Metric[];
+}
 export interface HealthItem { state: "ok" | "warn" | "bad"; label: string; detail?: string; warehouse?: string; region?: string; version?: string }
 export type Health = Record<string, HealthItem>;

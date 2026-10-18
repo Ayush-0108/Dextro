@@ -41,7 +41,10 @@ def datasets() -> dict[str, dict[str, Any]]:
             continue
         out[p.stem] = {"id": p.stem, "path": str(p.relative_to(ROOT)), "title": d.get("title") or p.stem,
                        "coverage": (d.get("data_coverage") or "").strip(),
-                       "tables": len(d.get("entities") or []), "sample_questions": d.get("sample_questions") or []}
+                       "tables": len(d.get("entities") or []), "sample_questions": d.get("sample_questions") or [],
+                       "description": (d.get("description") or "").strip(),
+                       "entities": d.get("entities") or [],
+                       "metrics": d.get("metrics") or []}
     return out
 
 

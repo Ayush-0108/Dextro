@@ -21,3 +21,7 @@ private/
 
 # local Claude Code preview config
 .claude/launch.json
+
+# Web build artifacts
+*.tsbuildinfo
+web/dist/
