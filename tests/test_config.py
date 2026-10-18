@@ -57,3 +57,24 @@ def test_render_env_fills_values_and_keeps_comments(tmp_path, monkeypatch):
     load_dotenv(env)
     assert os.environ["SNOWFLAKE_ACCOUNT"] == "A-B" and os.environ["SNOWFLAKE_PASSWORD"] == "p'w #1"
     assert os.environ["GEMINI_API_KEY"] == "k"
+
+
+def test_fill_mode_asks_only_for_missing_values(tmp_path, monkeypatch):
+    import make_env
+    (tmp_path / ".env").write_text("SNOWFLAKE_ACCOUNT='A-B'\nSNOWFLAKE_USER='me'\nSNOWFLAKE_PASSWORD=\nGEMINI_API_KEY=\n")
+    monkeypatch.setattr(make_env, "ROOT", tmp_path)
+    asked = []
+    monkeypatch.setattr(make_env.getpass, "getpass", lambda prompt: asked.append(prompt) or "secret value")
+    monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail(f"should not ask: {prompt}"))
+    assert make_env.main(["--fill"]) == 0
+    assert len(asked) == 2 and make_env.missing_values((tmp_path / ".env").read_text()) == []
+    assert (tmp_path / ".env.bak").exists() and oct((tmp_path / ".env").stat().st_mode)[-3:] == "600"
+    monkeypatch.setattr(os, "environ", {})
+    load_dotenv(tmp_path / ".env")
+    assert os.environ["SNOWFLAKE_ACCOUNT"] == "A-B" and os.environ["SNOWFLAKE_PASSWORD"] == "secret value"
+
+
+def test_placeholders_count_as_missing():
+    from make_env import missing_values
+    assert missing_values("SNOWFLAKE_ACCOUNT=myorg-myaccount\nSNOWFLAKE_USER=your_login_name\n") == [
+        "SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD", "GEMINI_API_KEY"]

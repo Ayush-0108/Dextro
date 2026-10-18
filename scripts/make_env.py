@@ -2,6 +2,7 @@
 
     python scripts/make_env.py            # asks for the Snowflake account, login, password and Gemini key
     python scripts/make_env.py --force    # replace an existing .env (the old one is kept as .env.bak)
+    python scripts/make_env.py --fill     # keep an existing .env; ask only for values that are still empty
 
 Starts from .env.example, fills in the values you type (passwords and keys are not echoed), and writes .env with
 permissions 600. .env is git-ignored. Option A (password sign-in) is the default; see .env.example for key pairs.
@@ -61,28 +62,57 @@ def render_env(template: str, values: dict[str, str]) -> str:
     return "\n".join(out) + "\n"
 
 
+REQUIRED = ("SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD", "GEMINI_API_KEY")
+
+
+def missing_values(env_text: str) -> list[str]:
+    """Required keys whose value in an existing .env is empty or still the .env.example placeholder."""
+    from datamind.config import parse_env_value
+    current: dict[str, str] = {}
+    for line in env_text.splitlines():
+        m = re.match(r"^\s*([A-Z][A-Z0-9_]*)=(.*)$", line)
+        if m:
+            current[m.group(1)] = parse_env_value(m.group(2))
+    placeholders = {"myorg-myaccount", "your_login_name"}
+    return [k for k in REQUIRED if not current.get(k) or current[k] in placeholders]
+
+
+def ask(key: str) -> str:
+    if key == "SNOWFLAKE_ACCOUNT":
+        print("Snowflake account identifier: in Snowsight, click your name (bottom left) > Account >\n"
+              "'View account details', and copy 'Account identifier' (looks like ORGNAME-ACCOUNTNAME).")
+        return normalize_account(input("Account identifier: "))
+    if key == "SNOWFLAKE_USER":
+        return input("Snowflake login name: ").strip()
+    if key == "SNOWFLAKE_PASSWORD":
+        return getpass.getpass("Snowflake password (not shown): ")
+    return getpass.getpass("Gemini API key (not shown; Enter to add it later): ").strip()
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--force", action="store_true")
+    ap.add_argument("--force", action="store_true", help="replace an existing .env (backup kept as .env.bak)")
+    ap.add_argument("--fill", action="store_true", help="keep an existing .env and ask only for empty values")
     args = ap.parse_args(argv)
     env = ROOT / ".env"
-    if env.exists() and not args.force:
-        sys.exit(".env already exists; run with --force to replace it (a backup is kept as .env.bak)")
-    print("Snowflake account identifier: in Snowsight, click your name (bottom left) > Account >\n"
-          "'View account details', and copy 'Account identifier' (looks like ORGNAME-ACCOUNTNAME).")
-    values = {
-        "SNOWFLAKE_ACCOUNT": normalize_account(input("Account identifier: ")),
-        "SNOWFLAKE_USER": input("Snowflake login name: ").strip(),
-        "SNOWFLAKE_PASSWORD": getpass.getpass("Snowflake password (not shown): "),
-    }
-    key = getpass.getpass("Gemini API key (not shown; Enter to add it later): ").strip()
-    if key:
-        values["GEMINI_API_KEY"] = key
+    if env.exists() and not (args.force or args.fill):
+        sys.exit(".env already exists; use --fill to add missing values, or --force to start over")
+    if args.fill and env.exists():
+        template, keys = env.read_text(encoding="utf-8"), missing_values(env.read_text(encoding="utf-8"))
+        if not keys:
+            print(".env already has every required value. Next: python -m datamind check")
+            return 0
+    else:
+        template, keys = (ROOT / ".env.example").read_text(encoding="utf-8"), list(REQUIRED)
+    values = {k: v for k in keys if (v := ask(k))}
     if env.exists():
         shutil.copy2(env, ROOT / ".env.bak")
-    env.write_text(render_env((ROOT / ".env.example").read_text(encoding="utf-8"), values), encoding="utf-8")
+        (ROOT / ".env.bak").chmod(0o600)
+    env.write_text(render_env(template, values), encoding="utf-8")
     env.chmod(0o600)
-    print(f"Wrote {env} (only you can read it). Next: python -m datamind check")
+    still = missing_values(env.read_text(encoding="utf-8"))
+    print(f"Wrote {env} (only you can read it)."
+          + (f" Still empty: {', '.join(still)} (run again with --fill)." if still else " Next: python -m datamind check"))
     return 0
 
 
