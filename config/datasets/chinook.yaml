@@ -1,0 +1,313 @@
+# Semantic model for the Chinook digital media store dataset.
+# Data: Chinook SQLite sample data exported to DATAMIND_DB.CHINOOK by scripts/load_chinook.py.
+# To add a new dataset, describe its tables/joins/metrics and point DATAMIND_DATASET at it.
+name: chinook
+title: Digital media store (Chinook)
+description: >
+  A digital media store selling tracks and albums across multiple musical genres and media formats.
+  Customers from around the world place orders (invoices) consisting of one or more invoice lines.
+  Store employees handle operations, management, and customer support. Prices are in US dollars.
+database: DATAMIND_DB
+schema: CHINOOK
+data_coverage: >
+  Invoices dated from 2021-01-01 to 2025-12-22. 59 customers in 24 countries, 8 employees,
+  275 artists, 347 albums, 3,503 tracks across 25 genres and 5 media formats, 412 invoices,
+  and 2,240 invoice lines.
+notes:
+  - "Sales / Revenue means net sales: SUM(invoice_line.unit_price * invoice_line.quantity) unless the user asks for invoice total."
+  - "invoice.total is the invoice order total; do not add it to line-level sales without grouping."
+  - "Unless the user names another date (such as birth_date or hire_date), a year or period refers to invoice.invoice_date."
+  - "Customer support representative is customer -> support_rep (an employee playing the support_rep role). An employee's direct manager is employee -> manager (via reports_to)."
+  - "Playlist and track have a many-to-many relationship via playlist_track. Questions about playlists and tracks (e.g. track counts per playlist, or which playlists contain a track) query playlist_track directly, joining upward to playlist and track. Questions about sales (invoice_line) must not join to playlists, as a track can appear in multiple playlists which would cause fan-out duplication."
+sample_questions:
+  - What was total sales revenue in 2022?
+  - Which 5 artists generated the most revenue?
+  - How many customers are in Brazil?
+  - Which tracks have the longest duration?
+  - Who is the manager of each employee?
+  - How many tracks are in the Rock genre?
+
+entities:
+  - alias: invoice_line
+    table: INVOICE_LINE
+    description: One row per line item within an invoice (one track purchased in an invoice)
+    primary_key: [invoice_line_id]
+    columns:
+      - {name: invoice_line_id, type: id, description: Line item key}
+      - {name: invoice_id, type: id, description: Invoice key; links to invoice}
+      - {name: track_id, type: id, description: Track key; links to track}
+      - {name: unit_price, type: number, description: Unit purchase price per track (USD)}
+      - {name: quantity, type: number, description: Quantity of units purchased, synonyms: [qty, units]}
+
+  - alias: invoice
+    table: INVOICE
+    description: One row per customer invoice / order
+    primary_key: [invoice_id]
+    columns:
+      - {name: invoice_id, type: id, description: Invoice key, synonyms: [order id, bill id]}
+      - {name: customer_id, type: id, description: Customer key; links to customer}
+      - {name: invoice_date, type: date, description: Date the invoice was placed, synonyms: [order date, purchase date, sale date]}
+      - {name: billing_address, type: text, description: Billing street address}
+      - {name: billing_city, type: category, description: Billing city}
+      - {name: billing_state, type: category, description: Billing state or province}
+      - {name: billing_country, type: category, description: Billing country, synonyms: [order country, destination country], values: [Argentina, Australia, Austria, Belgium, Brazil, Canada, Chile, Czech Republic, Denmark, Finland, France, Germany, Hungary, India, Ireland, Italy, Netherlands, Norway, Poland, Portugal, Spain, Sweden, USA, United Kingdom], value_aliases: {US: USA, United States: USA, U.S.: USA, UK: United Kingdom, Great Britain: United Kingdom, England: United Kingdom}}
+      - {name: billing_postal_code, type: text, description: Billing postal / ZIP code}
+      - {name: total, type: number, description: Total billed amount for the invoice (USD), synonyms: [invoice total, order amount]}
+
+  - alias: customer
+    table: CUSTOMER
+    description: One row per registered customer
+    primary_key: [customer_id]
+    columns:
+      - {name: customer_id, type: id, description: Customer key}
+      - {name: first_name, type: text, description: Customer first name}
+      - {name: last_name, type: text, description: Customer last name}
+      - {name: company, type: text, description: Company or organization name}
+      - {name: address, type: text, description: Street address}
+      - {name: city, type: category, description: Customer city}
+      - {name: state, type: category, description: Customer state or province}
+      - {name: country, type: category, description: Customer country, synonyms: [customer nation], values: [Argentina, Australia, Austria, Belgium, Brazil, Canada, Chile, Czech Republic, Denmark, Finland, France, Germany, Hungary, India, Ireland, Italy, Netherlands, Norway, Poland, Portugal, Spain, Sweden, USA, United Kingdom], value_aliases: {US: USA, United States: USA, U.S.: USA, UK: United Kingdom, Great Britain: United Kingdom, England: United Kingdom}}
+      - {name: postal_code, type: text, description: Postal code}
+      - {name: phone, type: text, description: Customer phone number, sensitive: true}
+      - {name: fax, type: text, description: Customer fax number, sensitive: true}
+      - {name: email, type: text, description: Customer email address, sensitive: true}
+      - {name: support_rep_id, type: id, description: Support representative key; links to support_rep}
+
+  - alias: support_rep
+    table: EMPLOYEE
+    description: The customer's assigned sales support representative
+    primary_key: [employee_id]
+    columns:
+      - {name: employee_id, type: id, description: Employee key}
+      - {name: last_name, type: text, description: Support rep last name}
+      - {name: first_name, type: text, description: Support rep first name}
+      - {name: title, type: category, description: Job title, values: [General Manager, IT Manager, IT Staff, Sales Manager, Sales Support Agent]}
+      - {name: reports_to, type: id, description: Manager key; links to manager}
+      - {name: birth_date, type: date, description: Date of birth}
+      - {name: hire_date, type: date, description: Date hired}
+      - {name: address, type: text, description: Street address}
+      - {name: city, type: category, description: City}
+      - {name: state, type: category, description: State}
+      - {name: country, type: category, description: Country}
+      - {name: postal_code, type: text, description: Postal code}
+      - {name: phone, type: text, description: Phone number, sensitive: true}
+      - {name: fax, type: text, description: Fax number, sensitive: true}
+      - {name: email, type: text, description: Email address, sensitive: true}
+
+  - alias: employee
+    table: EMPLOYEE
+    description: Store staff member
+    primary_key: [employee_id]
+    columns:
+      - {name: employee_id, type: id, description: Employee key}
+      - {name: last_name, type: text, description: Employee last name}
+      - {name: first_name, type: text, description: Employee first name}
+      - {name: title, type: category, description: Job title, values: [General Manager, IT Manager, IT Staff, Sales Manager, Sales Support Agent]}
+      - {name: reports_to, type: id, description: Manager key; links to manager}
+      - {name: birth_date, type: date, description: Date of birth}
+      - {name: hire_date, type: date, description: Date hired}
+      - {name: address, type: text, description: Street address}
+      - {name: city, type: category, description: City}
+      - {name: state, type: category, description: State}
+      - {name: country, type: category, description: Country}
+      - {name: postal_code, type: text, description: Postal code}
+      - {name: phone, type: text, description: Phone number, sensitive: true}
+      - {name: fax, type: text, description: Fax number, sensitive: true}
+      - {name: email, type: text, description: Email address, sensitive: true}
+
+  - alias: manager
+    table: EMPLOYEE
+    description: The direct supervisor or manager of an employee
+    primary_key: [employee_id]
+    columns:
+      - {name: employee_id, type: id, description: Manager employee key}
+      - {name: last_name, type: text, description: Manager last name}
+      - {name: first_name, type: text, description: Manager first name}
+      - {name: title, type: category, description: Manager job title, values: [General Manager, IT Manager, IT Staff, Sales Manager, Sales Support Agent]}
+      - {name: reports_to, type: id, description: Senior manager key}
+      - {name: birth_date, type: date, description: Date of birth}
+      - {name: hire_date, type: date, description: Date hired}
+      - {name: address, type: text, description: Street address}
+      - {name: city, type: category, description: City}
+      - {name: state, type: category, description: State}
+      - {name: country, type: category, description: Country}
+      - {name: postal_code, type: text, description: Postal code}
+      - {name: phone, type: text, description: Phone number, sensitive: true}
+      - {name: fax, type: text, description: Fax number, sensitive: true}
+      - {name: email, type: text, description: Email address, sensitive: true}
+
+  - alias: track
+    table: TRACK
+    description: One row per digital audio or video track
+    primary_key: [track_id]
+    columns:
+      - {name: track_id, type: id, description: Track key}
+      - {name: name, type: text, description: Track title, synonyms: [song, song title, track title]}
+      - {name: album_id, type: id, description: Album key; links to album}
+      - {name: media_type_id, type: id, description: Media format key; links to media_type}
+      - {name: genre_id, type: id, description: Genre key; links to genre}
+      - {name: composer, type: text, description: Track composer or songwriter}
+      - {name: milliseconds, type: number, description: Track duration in milliseconds, synonyms: [duration, track length]}
+      - {name: bytes, type: number, description: Track file size in bytes}
+      - {name: unit_price, type: number, description: Standard catalog price per track (USD), synonyms: [track price, song price]}
+
+  - alias: album
+    table: ALBUM
+    description: One row per music album
+    primary_key: [album_id]
+    columns:
+      - {name: album_id, type: id, description: Album key}
+      - {name: title, type: text, description: Album title, synonyms: [album name, record]}
+      - {name: artist_id, type: id, description: Artist key; links to artist}
+
+  - alias: artist
+    table: ARTIST
+    description: One row per music artist or band
+    primary_key: [artist_id]
+    columns:
+      - {name: artist_id, type: id, description: Artist key}
+      - {name: name, type: text, description: Artist or band name, synonyms: [musician, band, singer, performer]}
+
+  - alias: genre
+    table: GENRE
+    description: Musical genre classification
+    primary_key: [genre_id]
+    columns:
+      - {name: genre_id, type: id, description: Genre key}
+      - {name: name, type: category, description: Genre name, synonyms: [music genre, musical style], values: [Alternative, Alternative & Punk, Blues, Bossa Nova, Classical, Comedy, Drama, Easy Listening, Electronica/Dance, Heavy Metal, Hip Hop/Rap, Jazz, Latin, Metal, Opera, Pop, R&B/Soul, Reggae, Rock, Rock And Roll, Sci Fi & Fantasy, Science Fiction, Soundtrack, TV Shows, World]}
+
+  - alias: media_type
+    table: MEDIA_TYPE
+    description: Digital media storage format
+    primary_key: [media_type_id]
+    columns:
+      - {name: media_type_id, type: id, description: Media type key}
+      - {name: name, type: category, description: Format name, synonyms: [format, file format, encoding], values: [AAC audio file, MPEG audio file, Protected AAC audio file, Protected MPEG-4 video file, Purchased AAC audio file]}
+
+  - alias: playlist
+    table: PLAYLIST
+    description: One row per named playlist
+    primary_key: [playlist_id]
+    columns:
+      - {name: playlist_id, type: id, description: Playlist key}
+      - {name: name, type: text, description: Playlist name, synonyms: [playlist title]}
+
+  - alias: playlist_track
+    table: PLAYLIST_TRACK
+    description: Junction table linking playlists to tracks in a many-to-many relationship
+    primary_key: [playlist_id, track_id]
+    columns:
+      - {name: playlist_id, type: id, description: Playlist key; links to playlist}
+      - {name: track_id, type: id, description: Track key; links to track}
+
+joins:
+  - {many: invoice_line, one: invoice, keys: [[invoice_id, invoice_id]]}
+  - {many: invoice_line, one: track, keys: [[track_id, track_id]]}
+  - {many: invoice, one: customer, keys: [[customer_id, customer_id]]}
+  - {many: customer, one: support_rep, keys: [[support_rep_id, employee_id]]}
+  - {many: support_rep, one: manager, keys: [[reports_to, employee_id]]}
+  - {many: employee, one: manager, keys: [[reports_to, employee_id]]}
+  - {many: track, one: album, keys: [[album_id, album_id]]}
+  - {many: track, one: genre, keys: [[genre_id, genre_id]]}
+  - {many: track, one: media_type, keys: [[media_type_id, media_type_id]]}
+  - {many: album, one: artist, keys: [[artist_id, artist_id]]}
+  - {many: playlist_track, one: playlist, keys: [[playlist_id, playlist_id]]}
+  - {many: playlist_track, one: track, keys: [[track_id, track_id]]}
+
+metrics:
+  - name: sales
+    expr: SUM(invoice_line.unit_price * invoice_line.quantity)
+    grain: invoice_line
+    description: Total net sales revenue from purchased tracks (USD)
+    synonyms: [revenue, total sales, spend, gross revenue]
+    format: currency
+
+  - name: invoice_total
+    expr: SUM(invoice.total)
+    grain: invoice
+    description: Total amount billed across invoices (USD)
+    synonyms: [total billed, billed amount]
+    format: currency
+
+  - name: quantity
+    expr: SUM(invoice_line.quantity)
+    grain: invoice_line
+    description: Total count of track units sold
+    synonyms: [units, units sold, volume, tracks sold]
+    format: integer
+
+  - name: track_count
+    expr: COUNT(DISTINCT track.track_id)
+    grain: track
+    fanout_safe: true
+    description: Number of distinct tracks
+    synonyms: [number of tracks, count of songs, songs]
+    format: integer
+
+  - name: customer_count
+    expr: COUNT(DISTINCT customer.customer_id)
+    grain: customer
+    fanout_safe: true
+    description: Number of distinct customers
+    synonyms: [number of customers, count of customers]
+    format: integer
+
+  - name: invoice_count
+    expr: COUNT(DISTINCT invoice.invoice_id)
+    grain: invoice
+    fanout_safe: true
+    description: Number of distinct customer invoices / orders
+    synonyms: [order count, number of orders, orders, count of invoices]
+    format: integer
+
+  - name: album_count
+    expr: COUNT(DISTINCT album.album_id)
+    grain: album
+    fanout_safe: true
+    description: Number of distinct albums
+    synonyms: [number of albums, count of albums]
+    format: integer
+
+  - name: artist_count
+    expr: COUNT(DISTINCT artist.artist_id)
+    grain: artist
+    fanout_safe: true
+    description: Number of distinct artists
+    synonyms: [number of artists, count of artists]
+    format: integer
+
+  - name: employee_count
+    expr: COUNT(DISTINCT employee.employee_id)
+    grain: employee
+    fanout_safe: true
+    description: Number of distinct employees
+    synonyms: [number of employees, count of staff]
+    format: integer
+
+  - name: avg_invoice_total
+    expr: AVG(invoice.total)
+    grain: invoice
+    description: Average billed total per invoice (USD)
+    synonyms: [average invoice total, average order value, average basket size]
+    format: currency
+
+  - name: avg_track_price
+    expr: AVG(track.unit_price)
+    grain: track
+    description: Average catalog price of tracks (USD)
+    synonyms: [average track price, average song price]
+    format: currency
+
+  - name: avg_track_length_seconds
+    expr: AVG(track.milliseconds) / 1000.0
+    grain: track
+    description: Average track duration in seconds
+    synonyms: [average duration, average song length]
+    format: number
+
+  - name: total_track_length_minutes
+    expr: SUM(track.milliseconds) / 60000.0
+    grain: track
+    description: Total track duration in minutes
+    synonyms: [total minutes, total duration]
+    format: number
