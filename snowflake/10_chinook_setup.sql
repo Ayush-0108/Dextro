@@ -23,14 +23,16 @@ USE SCHEMA DATAMIND_DB.CHINOOK;
 -- -------------------------------------------------------------------------------------
 -- 2. File format and stage for CSV data loading
 -- -------------------------------------------------------------------------------------
-CREATE FILE FORMAT IF NOT EXISTS CHINOOK_CSV_FORMAT
+-- OR REPLACE so a re-run updates it; AUTO because the exported dates are plain YYYY-MM-DD (no time part)
+CREATE OR REPLACE FILE FORMAT CHINOOK_CSV_FORMAT
   TYPE = 'CSV'
   FIELD_DELIMITER = ','
   RECORD_DELIMITER = '\n'
   SKIP_HEADER = 1
   FIELD_OPTIONALLY_ENCLOSED_BY = '"'
   NULL_IF = ('', 'NULL', 'null')
-  TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS';
+  DATE_FORMAT = 'AUTO'
+  TIMESTAMP_FORMAT = 'AUTO';
 
 CREATE STAGE IF NOT EXISTS CHINOOK_STAGE
   FILE_FORMAT = CHINOOK_CSV_FORMAT
@@ -156,10 +158,11 @@ COMMENT ON TABLE PLAYLIST_TRACK IS 'Many-to-many relationship linking playlists 
 CREATE MASKING POLICY IF NOT EXISTS MASK_EMAIL AS (val STRING) RETURNS STRING ->
   CASE WHEN CURRENT_ROLE() = 'DATAMIND_RESTRICTED' THEN '***@***.***' ELSE val END;
 
--- Apply phone masking (from 01_setup.sql) and email masking to customer personal info
-ALTER TABLE CUSTOMER MODIFY COLUMN phone SET MASKING POLICY MASK_PHONE FORCE;
+-- Apply phone masking (MASK_PHONE was created in DATAMIND_DB.TPCH by 01_setup.sql, so name it fully) and
+-- email masking to customer and employee personal info
+ALTER TABLE CUSTOMER MODIFY COLUMN phone SET MASKING POLICY DATAMIND_DB.TPCH.MASK_PHONE FORCE;
 ALTER TABLE CUSTOMER MODIFY COLUMN email SET MASKING POLICY MASK_EMAIL FORCE;
-ALTER TABLE EMPLOYEE MODIFY COLUMN phone SET MASKING POLICY MASK_PHONE FORCE;
+ALTER TABLE EMPLOYEE MODIFY COLUMN phone SET MASKING POLICY DATAMIND_DB.TPCH.MASK_PHONE FORCE;
 ALTER TABLE EMPLOYEE MODIFY COLUMN email SET MASKING POLICY MASK_EMAIL FORCE;
 
 -- -------------------------------------------------------------------------------------
