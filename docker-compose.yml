@@ -1,0 +1,19 @@
+# One command:  docker compose up --build   ->  http://localhost:8501
+# Needs a filled-in .env (python scripts/make_env.py) and, for local Gemma, Ollama running on the host.
+services:
+  datamind:
+    build: .
+    image: nexora:local
+    env_file: .env
+    environment:
+      # reach Ollama on the host machine (Docker Desktop on macOS/Windows; Linux uses the host-gateway below)
+      OLLAMA_HOST: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./.cache:/app/.cache      # cached Gemma replies, e.g. from scripts/warm_demo.py
+      - ./runs:/app/runs          # answer log (runs/answers.jsonl)
+      - ./keys:/app/keys:ro       # only used for key-pair sign-in (SNOWFLAKE_PRIVATE_KEY_FILE=keys/rsa_key.p8)
+    restart: unless-stopped

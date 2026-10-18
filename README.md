@@ -275,6 +275,19 @@ streamlit run app/streamlit_app.py
 python -m datamind ask "What was revenue by customer region in 1996?"
 ```
 
+### Or run it with Docker
+
+After steps 4–6 (Snowflake set up, `.env` filled in, Ollama running with `gemma4:12b`):
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:8501. The container reads `.env` at run time (it is never copied into the image), reaches
+Ollama on the host through `host.docker.internal`, and mounts `.cache/` so cached Gemma replies (for example from
+`python scripts/warm_demo.py`) are reused. On Linux, start Ollama with `OLLAMA_HOST=0.0.0.0` so the container can
+reach it.
+
 ---
 
 ## Configuration
