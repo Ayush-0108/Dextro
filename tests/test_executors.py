@@ -97,6 +97,22 @@ def test_keypair_script_writes_a_loadable_key(tmp_path):
 
 def test_relative_key_path_is_resolved_from_repo_root():
     from pathlib import Path
-    ex = SnowflakeExecutor(account="a", user="u", private_key_file="keys/rsa_key.p8")
+    # any file that exists relative to the repository root stands in for keys/rsa_key.p8
+    ex = SnowflakeExecutor(account="a", user="u", private_key_file="tests/conftest.py")
     p = Path(ex.params["private_key_file"])
-    assert p.is_absolute() and p.parts[-2:] == ("keys", "rsa_key.p8") and "password" not in ex.params
+    assert p.is_absolute() and p.exists() and "password" not in ex.params
+
+
+def test_password_sign_in_for_trial_accounts(monkeypatch):
+    monkeypatch.delenv("SNOWFLAKE_PRIVATE_KEY_FILE", raising=False)
+    ex = SnowflakeExecutor(account="a", user="me", password="pw")
+    assert ex.params["password"] == "pw" and "private_key_file" not in ex.params
+
+
+def test_missing_key_file_or_credentials_give_clear_errors(monkeypatch):
+    for k in ("SNOWFLAKE_PRIVATE_KEY_FILE", "SNOWFLAKE_PASSWORD", "SNOWFLAKE_AUTHENTICATOR"):
+        monkeypatch.delenv(k, raising=False)
+    with pytest.raises(ValueError, match="make_keypair"):
+        SnowflakeExecutor(account="a", user="u", private_key_file="keys/does_not_exist.p8")
+    with pytest.raises(ValueError, match="SNOWFLAKE_PASSWORD"):
+        SnowflakeExecutor(account="a", user="u")

@@ -135,11 +135,12 @@ SHOW GRANTS TO ROLE DATAMIND_AGENT;
 -- USE ROLE DATAMIND_RESTRICTED; SELECT C_NAME, C_PHONE, C_ACCTBAL FROM DATAMIND_DB.TPCH.CUSTOMER LIMIT 3;
 
 -- -------------------------------------------------------------------------------------
--- 7. The app user: holds ONLY the agent roles and signs in with a key pair, not a password.
---    TYPE = SERVICE users cannot have passwords, so Snowflake's MFA requirement for people
---    doesn't apply to the app. After this script, run on your laptop:
---        python scripts/make_keypair.py
---    and paste the ALTER USER statement it prints into this worksheet.
+-- 7. Optional app user for key-pair sign-in (sign-in option B in .env.example).
+--    On a trial account you can skip this and sign in with your own login and password
+--    (option A): trial accounts are exempt from Snowflake's MFA rollout, and the app still
+--    runs every query as DATAMIND_AGENT with secondary roles off.
+--    DATAMIND_APP holds ONLY the agent roles and, as TYPE = SERVICE, cannot have a password.
+--    To use it: run `python scripts/make_keypair.py` and paste the ALTER USER it prints here.
 -- -------------------------------------------------------------------------------------
 USE ROLE ACCOUNTADMIN;
 CREATE USER IF NOT EXISTS DATAMIND_APP

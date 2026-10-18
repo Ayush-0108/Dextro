@@ -93,16 +93,24 @@ class SnowflakeExecutor:
         pk_file = private_key_file or os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
         pw = password or os.getenv("SNOWFLAKE_PASSWORD")
         auth = authenticator or os.getenv("SNOWFLAKE_AUTHENTICATOR")
+        # Two supported sign-ins: a password (trial accounts are exempt from Snowflake's MFA rollout, so this is
+        # the quick start) or a key pair for the TYPE = SERVICE user DATAMIND_APP (works on any account).
         if pk_file:
             pk = Path(pk_file).expanduser()
             if not pk.is_absolute():   # relative paths in .env are relative to the repository
                 pk = Path(__file__).resolve().parent.parent / pk
+            if not pk.exists():
+                raise ValueError(f"SNOWFLAKE_PRIVATE_KEY_FILE={pk_file} not found: run python scripts/make_keypair.py, "
+                                 "or remove that line and set SNOWFLAKE_PASSWORD to sign in with a password")
             self.params["private_key_file"] = str(pk)
             pp = private_key_passphrase or os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
             if pp:
                 self.params["private_key_file_pwd"] = pp
         elif pw:
             self.params["password"] = pw
+        elif not auth:
+            raise ValueError("no Snowflake credentials: set SNOWFLAKE_PASSWORD (trial accounts) or "
+                             "SNOWFLAKE_PRIVATE_KEY_FILE (key pair) in .env")
         if auth:
             self.params["authenticator"] = auth
         self._conn = None
