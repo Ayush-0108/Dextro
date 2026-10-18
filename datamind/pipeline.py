@@ -125,11 +125,10 @@ class DataMind:
             exclude_example_ids: Sequence[str] = ()) -> Answer:
         t0 = time.time()
         aid = uuid.uuid4().hex[:10]
-        if role and hasattr(self.executor, "set_role"):
-            self.executor.set_role(role)
+        # the role travels with every query (the executor may be shared by several app sessions)
         ans = Answer(answer_id=aid, question=question, standalone_question=question, status="error", message="",
                      model_name=self.llm.name, engine=getattr(self.executor, "engine", ""),
-                     role=getattr(self.executor, "role", None))
+                     role=role.upper() if role else getattr(self.executor, "role", None))
         try:
             self._ask(ans, question, list(history), set(exclude_example_ids))
         except Exception as e:  # never crash the UI; report honestly
@@ -192,7 +191,7 @@ class DataMind:
 
         t = time.time()
         for c in cands:
-            self._validate_and_run(c, q, ans.answer_id)
+            self._validate_and_run(c, q, ans.answer_id, ans.role)
         ans.candidates = cands
         self._reconcile(ans, q, examples, previous_sql)
         ans.timings["execute_s"] = round(time.time() - t, 2)
@@ -274,7 +273,7 @@ class DataMind:
             c.error = str(e)
         return c
 
-    def _validate_and_run(self, c: Candidate, q: str, answer_id: str) -> None:
+    def _validate_and_run(self, c: Candidate, q: str, answer_id: str, role: str | None = None) -> None:
         if not c.sql:
             return
         sql = c.sql
@@ -282,7 +281,7 @@ class DataMind:
             v = validate_sql(sql, self.model, max_rows=self.max_rows)
             if v.ok:
                 res = self.executor.run(v.sql, tag={"answer_id": answer_id, "candidate": c.name, "attempt": attempt},
-                                        max_rows=self.max_rows)
+                                        max_rows=self.max_rows, role=role)
                 c.attempts.append({"stage": "execute", "sql": v.sql, "query_id": res.query_id, "error": res.error})
                 if res.ok:
                     c.sql, c.result, c.error = v.sql, res, None
@@ -318,7 +317,7 @@ class DataMind:
         ok = [c for c in ans.candidates if c.ok]
         if len(ok) <= 1 or len(self._group(ok)) > 1:
             alt = self._sql_candidate(q, ans.assumptions, examples, previous_sql, alt=True)
-            self._validate_and_run(alt, q, ans.answer_id)
+            self._validate_and_run(alt, q, ans.answer_id, ans.role)
             ans.candidates.append(alt)
             ok = [c for c in ans.candidates if c.ok]
         if not ok:

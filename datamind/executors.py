@@ -11,6 +11,7 @@ import decimal
 import hashlib
 import json
 import os
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,7 +59,8 @@ def _jsonable(v: Any) -> Any:
 class Executor(Protocol):
     engine: str
 
-    def run(self, sql: str, tag: dict[str, Any] | None = None, max_rows: int = 1000) -> QueryResult: ...
+    def run(self, sql: str, tag: dict[str, Any] | None = None, max_rows: int = 1000,
+            role: str | None = None) -> QueryResult: ...
 
 
 class SnowflakeExecutor:
@@ -85,6 +87,8 @@ class SnowflakeExecutor:
             "session_parameters": {"STATEMENT_TIMEOUT_IN_SECONDS": statement_timeout_s,
                                    "QUERY_TAG": json.dumps({"app": "datamind"})},
             "application": "DataMind",
+            # keep the session alive while the app sits idle during judging
+            "client_session_keep_alive": True,
         }
         pk_file = private_key_file or os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
         pw = password or os.getenv("SNOWFLAKE_PASSWORD")
@@ -99,6 +103,9 @@ class SnowflakeExecutor:
         if auth:
             self.params["authenticator"] = auth
         self._conn = None
+        self._session_role: str | None = None
+        # one connection is shared by every app session: the role switch and the query must run together
+        self._lock = threading.RLock()
 
     @property
     def role(self) -> str:
@@ -108,25 +115,51 @@ class SnowflakeExecutor:
         if self._conn is None:
             import snowflake.connector  # imported lazily so offline tests don't need credentials
             self._conn = snowflake.connector.connect(**self.params)
+            self._session_role = self.params["role"]
             # Only the agent role's privileges may apply: without this, a user's default secondary
             # roles (often ALL) would add write privileges from their other roles to this session.
             self._conn.cursor().execute("USE SECONDARY ROLES NONE")
         return self._conn
 
-    def set_role(self, role: str) -> None:
+    def _check_role(self, role: str) -> str:
         role = role.upper()
         if role not in self.ALLOWED_ROLES:
             raise ValueError(f"role {role} is not an allowed agent role")
-        if role != self.params["role"]:
-            self.params["role"] = role
-            if self._conn is not None:
-                self._conn.cursor().execute(f"USE ROLE {role}")
+        return role
 
-    def run(self, sql: str, tag: dict[str, Any] | None = None, max_rows: int = 1000) -> QueryResult:
-        conn = self.connect()
-        cur = conn.cursor()
-        t0 = time.time()
+    def set_role(self, role: str) -> None:
+        """Change the default role for later queries (prefer passing `role` to `run`)."""
+        with self._lock:
+            self.params["role"] = self._check_role(role)
+
+    def _reset(self) -> None:
         try:
+            if self._conn is not None:
+                self._conn.close()
+        except Exception:
+            pass
+        self._conn, self._session_role = None, None
+
+    def run(self, sql: str, tag: dict[str, Any] | None = None, max_rows: int = 1000,
+            role: str | None = None) -> QueryResult:
+        role = self._check_role(role or self.params["role"])
+        with self._lock:
+            for attempt in range(2):
+                res = self._run_once(sql, tag, max_rows, role)
+                if res.ok or attempt == 1 or not _is_connection_error(res.error or ""):
+                    return res
+                self._reset()   # session expired or connection dropped: reconnect once
+            return res
+
+    def _run_once(self, sql: str, tag: dict[str, Any] | None, max_rows: int, role: str) -> QueryResult:
+        t0 = time.time()
+        cur = None
+        try:
+            conn = self.connect()
+            cur = conn.cursor()
+            if role != self._session_role:
+                cur.execute(f"USE ROLE {role}")   # role is checked against ALLOWED_ROLES
+                self._session_role = role
             qtag = json.dumps({"app": "datamind", **(tag or {})})[:2000]
             cur.execute("ALTER SESSION SET QUERY_TAG = %s", (qtag,))
             cur.execute(sql)
@@ -134,16 +167,29 @@ class SnowflakeExecutor:
             cols = [d[0].lower() for d in cur.description] if cur.description else []
             return QueryResult(sql=sql, columns=cols, rows=[tuple(r) for r in rows[:max_rows]],
                                truncated=len(rows) > max_rows, query_id=cur.sfqid,
-                               elapsed_ms=int((time.time() - t0) * 1000), engine=self.engine, role=self.role)
+                               elapsed_ms=int((time.time() - t0) * 1000), engine=self.engine, role=role)
         except Exception as e:  # surface the database error to the repair loop
             return QueryResult(sql=sql, query_id=getattr(cur, "sfqid", None), engine=self.engine,
-                               elapsed_ms=int((time.time() - t0) * 1000), role=self.role,
+                               elapsed_ms=int((time.time() - t0) * 1000), role=role,
                                error=f"{type(e).__name__}: {e}")
         finally:
-            cur.close()
+            if cur is not None:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
 
     def describe(self) -> dict[str, Any]:
         return {k: self.params[k] for k in ("account", "user", "role", "warehouse", "database", "schema")}
+
+
+_CONNECTION_ERRORS = ("authentication token has expired", "session no longer exists", "connection is closed",
+                      "session expired", "390114", "390112", "250001", "250002", "08001", "08003")
+
+
+def _is_connection_error(message: str) -> bool:
+    m = message.lower()
+    return any(s in m for s in _CONNECTION_ERRORS)
 
 
 class DuckDBExecutor:
@@ -174,7 +220,8 @@ class DuckDBExecutor:
     def transpile(self, sql: str) -> str:
         return sqlglot.transpile(sql, read="snowflake", write="duckdb")[0]
 
-    def run(self, sql: str, tag: dict[str, Any] | None = None, max_rows: int = 1000) -> QueryResult:
+    def run(self, sql: str, tag: dict[str, Any] | None = None, max_rows: int = 1000,
+            role: str | None = None) -> QueryResult:
         t0 = time.time()
         qid = "duckdb-" + hashlib.sha1(f"{sql}{time.time()}".encode()).hexdigest()[:12]
         try:
