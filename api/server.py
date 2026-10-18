@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -130,6 +130,116 @@ def ask(req: AskRequest) -> dict[str, Any]:
     a = ag.ask(req.question, history=[h.model_dump() for h in req.history], role=role)
     wh = ag.executor.describe().get("warehouse", "") if hasattr(ag.executor, "describe") else ""
     return answer_payload(a, wh)
+
+
+@app.post("/api/datasets/upload")
+async def upload_dataset(
+    file: UploadFile = File(...),
+    name: str = Form(""),
+    title: str = Form("")
+) -> dict[str, Any]:
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Uploaded file is empty.")
+
+    import io, re, pandas as pd
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except Exception as e:
+        raise HTTPException(400, f"Could not parse CSV: {e}")
+
+    if df.empty:
+        raise HTTPException(400, "CSV file has no rows.")
+
+    clean_id = re.sub(r"[^a-zA-Z0-9_]", "", (name or file.filename or "dataset").split(".")[0]).lower()
+    if not clean_id:
+        clean_id = "custom_dataset"
+    clean_title = title.strip() or clean_id.replace("_", " ").title()
+
+    df.columns = [re.sub(r"[^a-zA-Z0-9_]", "_", str(c)).upper() for c in df.columns]
+
+    local_dir = ROOT / "data" / clean_id
+    local_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = local_dir / f"{clean_id}.csv"
+    csv_path.write_bytes(content)
+
+    ag = agent(default_dataset())
+    ex = ag.executor
+    schema_name = clean_id.upper()
+    db_name = getattr(ag.model, "database", "DATAMIND_DB")
+
+    yaml_text = ""
+    if getattr(ex, "engine", "") == "snowflake":
+        import os
+        account = os.getenv("SNOWFLAKE_ACCOUNT")
+        user = os.getenv("SNOWFLAKE_USER")
+        password = os.getenv("SNOWFLAKE_PASSWORD")
+        if account and user and password:
+            try:
+                import snowflake.connector
+                from snowflake.connector.pandas_tools import write_pandas
+                conn = snowflake.connector.connect(
+                    account=account,
+                    user=user,
+                    password=password,
+                    role="DATAMIND_ADMIN",
+                    warehouse=os.getenv("SNOWFLAKE_WAREHOUSE", "DATAMIND_WH"),
+                    database=db_name
+                )
+                with conn.cursor() as cur:
+                    cur.execute(f"CREATE SCHEMA IF NOT EXISTS {db_name}.{schema_name}")
+                    cur.execute(f"GRANT USAGE ON SCHEMA {db_name}.{schema_name} TO ROLE DATAMIND_AGENT")
+                    cur.execute(f"GRANT USAGE ON SCHEMA {db_name}.{schema_name} TO ROLE DATAMIND_RESTRICTED")
+                write_pandas(conn, df, clean_id.upper(), schema=schema_name, database=db_name, auto_create_table=True, overwrite=True)
+                with conn.cursor() as cur:
+                    cur.execute(f"GRANT SELECT ON ALL TABLES IN SCHEMA {db_name}.{schema_name} TO ROLE DATAMIND_AGENT")
+                    cur.execute(f"GRANT SELECT ON ALL TABLES IN SCHEMA {db_name}.{schema_name} TO ROLE DATAMIND_RESTRICTED")
+                conn.close()
+                from datamind.discover import draft_model
+                yaml_text = draft_model(ex, db_name, schema_name, clean_id, clean_title)
+            except Exception:
+                pass
+
+    if not yaml_text:
+        cols = []
+        for col in df.columns:
+            series = df[col]
+            dtype = "number" if pd.api.types.is_numeric_dtype(series) else ("date" if pd.api.types.is_datetime64_any_dtype(series) else "text")
+            unique_vals = series.dropna().unique()
+            if dtype == "text" and len(unique_vals) <= 30:
+                cols.append({"name": col.lower(), "type": "category", "description": f"{col} category", "values": [str(v) for v in unique_vals[:30]]})
+            else:
+                cols.append({"name": col.lower(), "type": dtype, "description": f"{col} column"})
+        entity = {
+            "alias": clean_id,
+            "table": clean_id.upper(),
+            "description": f"One row per {clean_id} record ({len(df)} total rows).",
+            "columns": cols
+        }
+        yaml_dict = {
+            "name": clean_id,
+            "title": clean_title,
+            "description": f"Dataset with {len(df)} rows and {len(df.columns)} columns.",
+            "database": db_name,
+            "schema": schema_name,
+            "data_coverage": f"{len(df)} rows loaded.",
+            "sample_questions": [f"How many {clean_id} records are there?"],
+            "entities": [entity],
+            "metrics": [{"name": f"{clean_id}_count", "formula": "COUNT(*)", "description": f"Total {clean_id} count"}]
+        }
+        yaml_text = yaml.dump(yaml_dict, sort_keys=False)
+
+    yaml_path = DATASET_DIR / f"{clean_id}.yaml"
+    yaml_path.write_text(yaml_text, encoding="utf-8")
+
+    return {
+        "ok": True,
+        "id": clean_id,
+        "title": clean_title,
+        "rows": len(df),
+        "columns": list(df.columns),
+        "datasets": list(datasets().values())
+    }
 
 
 _dist = ROOT / "web" / "dist"

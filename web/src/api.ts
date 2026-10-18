@@ -13,3 +13,15 @@ export const ask = (question: string, dataset: string, role: "analyst" | "restri
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, dataset, role, history }),
   });
+
+export const uploadDataset = async (file: File, name: string, title: string) => {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("name", name);
+  form.append("title", title);
+  return call<{ ok: boolean; id: string; title: string; rows: number; datasets: Dataset[] }>("/api/datasets/upload", {
+    method: "POST",
+    body: form,
+  });
+};
+

@@ -17,7 +17,23 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [loadError, setLoadError] = useState("");
+  const [historyList, setHistoryList] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("datamind_query_history") || "[]"); } catch { return []; }
+  });
   const bottom = useRef<HTMLDivElement>(null);
+
+  const saveToHistory = (q: string) => {
+    setHistoryList((prev) => {
+      const next = [q, ...prev.filter((x) => x !== q)].slice(0, 25);
+      try { localStorage.setItem("datamind_query_history", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
+  const clearHistory = () => {
+    setHistoryList([]);
+    try { localStorage.removeItem("datamind_query_history"); } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     api.getDatasets().then((d) => { setDatasets(d.datasets); setDataset(d.default); })
@@ -39,6 +55,7 @@ export default function App() {
   const submit = async (q: string) => {
     const question = q.trim();
     if (!question || busy) return;
+    saveToHistory(question);
     setInput(""); setBusy(true); setElapsed(0);
     const history = turns.filter((t) => t.answer && ["answered", "empty"].includes(t.answer.status)).map((t) => t.answer!.history_entry);
     setTurns((ts) => [...ts, { question }]);
@@ -56,7 +73,9 @@ export default function App() {
   return (
     <div className="flex h-screen">
       <Sidebar datasets={datasets} dataset={dataset} onDataset={(id) => { setDataset(id); setTurns([]); }}
-        health={health} role={role} onRole={setRole} onNew={() => setTurns([])} />
+        health={health} role={role} onRole={setRole} onNew={() => setTurns([])}
+        history={historyList} onSelectHistory={(q) => submit(q)} onClearHistory={clearHistory}
+        onUploadSuccess={(newDatasets, newId) => { setDatasets(newDatasets); setDataset(newId); setTurns([]); }} />
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-5xl px-8 pb-48 pt-8">
