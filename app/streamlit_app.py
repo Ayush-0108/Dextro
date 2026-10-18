@@ -63,6 +63,14 @@ DATASETS = {   # label -> semantic model; only datasets whose YAML exists are of
     "Chinook · digital music store (11 tables)": "config/datasets/chinook.yaml",
 }
 DATASETS = {k: v for k, v in DATASETS.items() if (ROOT / v).exists()}
+for _p in sorted((ROOT / "config" / "datasets").glob("*.yaml")):   # any new dataset YAML appears automatically
+    _rel = str(_p.relative_to(ROOT))
+    if _rel not in DATASETS.values():
+        try:
+            import yaml
+            DATASETS[(yaml.safe_load(_p.read_text(encoding="utf-8")) or {}).get("title") or _p.stem] = _rel
+        except Exception:  # noqa: BLE001 - a broken draft shouldn't take the app down
+            pass
 ROLES = {"Analyst (full access)": "DATAMIND_AGENT",
          "Restricted (PII masked by Snowflake masking policies)": "DATAMIND_RESTRICTED"}
 STATUS_LABEL = {"answered": "Answered", "empty": "No matching rows", "clarify": "Needs clarification",
