@@ -65,6 +65,7 @@ def build_snowflake_params() -> dict[str, Any]:
         "database": os.environ.get("SNOWFLAKE_DATABASE", "DATAMIND_DB"),
         "schema": "CHINOOK",
         "client_session_keep_alive": True,
+        "enable_server_session_keep_alive_auto_detection": False,   # synchronous loads; avoids a FutureWarning
         "application": "DataMind-Loader",
     }
     pk_file = os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
