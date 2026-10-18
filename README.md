@@ -383,13 +383,22 @@ The following results were recorded on October 18, 2026. They represent the chec
 
 | Evaluation | Result | Interpretation |
 |---|---:|---|
-| Offline automated tests | 177/177 passed | Validates the tested components and scenarios |
+| **Live accuracy, 20-question sample** | **19/20 (95%)** | Snowflake + Gemma 4 12B (Ollama), every tier represented; [report](eval/reports/eval_20261018T162014.md) |
+| High-confidence answers in that sample | 13/13 correct | When Nexora says "high confidence", it was right every time (medium 1/1, low 1/2) |
+| Offline automated tests | 185/185 passed | Validates the tested components and scenarios |
 | Gold-query comparison | 52/52 matched | Expected answers matched between Snowflake and independent DuckDB SF1 |
 | Coverage-check false alarms | 0 of 142 | No correct gold answer (TPC-H + Chinook, with paraphrases) is flagged by the coverage and shape checks |
 | Chinook harness | 22/22 passed | Validates the scripted harness and its gold-query workflow |
 | Live Snowflake + Ollama smoke test | 1 question | One correct, high-confidence response; not a comprehensive accuracy evaluation |
 
-**Important:** End-to-end accuracy across the evaluation set has not yet been measured. Gold-query equivalence validates the expected answers, but does not by itself establish Nexora's model accuracy.
+**About the sample:** 20 of the 66 development questions, chosen to cover every tier (single table 3, joins 5,
+multi-step 4, time 2, ambiguous, not-in-data, unsafe, follow-up 1 each, robustness 2). Per tier: 100% everywhere
+except time (1/2). Median 90 s per question on a 16 GB laptop (p90 146 s), 85 Gemma calls, thinking off. The one
+failure ("revenue in each quarter of 1996") came from Gemma using `TO_CHAR(date, 'YYYY-"Q"Q')`, which Snowflake
+prints as the same label for every date; the validator now rejects that and a shape check flags a one-row
+"each quarter" answer (fixed after this run). The full 66-question run is in progress. Development questions also
+serve as few-shot examples, with the question being scored excluded (leave-one-out), so dev accuracy can be
+optimistic; a hold-out set written by a teammate is the stronger test.
 
 ### Evaluation set
 
@@ -444,7 +453,7 @@ Evaluation reports are written under `eval/reports/`.
 
 | # | Rubric Criterion | Pts | How Nexora addresses it |
 |---|---|:---:|---|
-| 1 | **Correctness & Usefulness** | 20 | Evaluation harness with 52 gold queries verified on two engines; two independent queries plus coverage and shape checks per answer. Accuracy: *not yet measured* (see Evaluation). |
+| 1 | **Correctness & Usefulness** | 20 | Live accuracy 19/20 on a 20-question sample across all tiers; high-confidence answers 13/13 correct. 52 gold queries verified on two engines; two independent queries plus coverage and shape checks per answer. |
 | 2 | **NL-to-Data Interaction** | 10 | Varied phrasing, filters, aggregations, multi-table joins, and conversation follow-ups (measured by the follow-up tier). |
 | 3 | **Evidence & Explainability** | 15 | Executed Snowflake SQL, query ID, elapsed time, AST-based explanation, and cell-by-cell numerical fact-checking. |
 | 4 | **Meaningful Snowflake Depth** | 15 | Enterprise trial, three least-privilege roles, dynamic data masking, query tags, resource monitor, Time Travel demo, stage + `COPY INTO` loading. |
@@ -482,7 +491,7 @@ The Chinook music-store dataset is the worked example ([`config/datasets/chinook
 
 ## Known Limitations
 
-- Comprehensive end-to-end model accuracy has not yet been measured.
+- Accuracy is measured on a 20-question sample so far (19/20); the full 66-question run is in progress.
 - Agreement between two query paths increases confidence but does not guarantee correctness if both paths share the same error; the coverage checks catch dropped conditions, not wrong formulas.
 - Some complex ratios, rankings, and comparisons may depend on the independent SQL-generation path when the structured plan cannot express the question.
 - The numerical checker supports selected derived values; a coincidentally matching derived number is not necessarily proof that the reasoning is correct.
