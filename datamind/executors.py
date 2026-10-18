@@ -192,6 +192,10 @@ class SnowflakeExecutor:
                 except Exception:
                     pass
 
+    def close(self) -> None:
+        with self._lock:
+            self._reset()
+
     def describe(self) -> dict[str, Any]:
         return {k: self.params[k] for k in ("account", "user", "role", "warehouse", "database", "schema")}
 

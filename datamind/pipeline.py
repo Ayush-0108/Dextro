@@ -220,6 +220,13 @@ class DataMind:
                            + self.model.data_coverage.strip())
             return
         ans.status = "answered"
+        if masked and self._orders_by(ans.chosen.sql or "", set(masked)):
+            # a ranking by a value this role can't see is meaningless: say so instead of narrating an order of NULLs
+            ans.message = (f"This ranking is ordered by {', '.join(masked)}, which a Snowflake masking policy hides "
+                           f"from the {ans.role} role, so the order of the rows below is not meaningful. "
+                           "Ask as the Analyst role to rank by it.")
+            ans.narration = "masked"
+            return
         t = time.time()
         self._narrate(ans, q, res)
         ans.timings["narrate_s"] = round(time.time() - t, 2)
@@ -368,8 +375,11 @@ class DataMind:
                              "every condition in the question; the others are listed as alternatives.")
         else:
             ans.confidence = "low"
-            ans.agreement = (f"The {n_ok} independently generated queries disagree. Showing the one built from "
-                             "the verified semantic model; the others are listed as alternatives.")
+            shown = {"plan": "the one built from the verified semantic model",
+                     "sql": "the query Gemma wrote directly",
+                     "sql_alt": "the independent re-derivation"}.get(ans.chosen.name, f"the {ans.chosen.name} query")
+            ans.agreement = (f"The {n_ok} independently generated queries disagree. Showing {shown}; "
+                             "the others are listed as alternatives.")
         if ans.checks:
             # agreement on a query that misses a stated condition is not high confidence
             if ans.confidence == "high":
@@ -421,6 +431,31 @@ class DataMind:
                     all(v is None or (isinstance(v, str) and "*" in v) for v in vals):
                 out.append(col)
         return out
+
+    def _orders_by(self, sql: str, names: set[str]) -> bool:
+        """True if the query's final ORDER BY uses one of `names` (output aliases) or a sensitive column."""
+        sensitive = {c.name.lower() for e in self.model.entities for c in e.columns if c.sensitive}
+        targets = {n.lower() for n in names} | sensitive
+        try:
+            tree = sqlglot.parse_one(sql, read="snowflake")
+        except sqlglot.errors.ParseError:
+            return False
+        frm = tree.args.get("from_") or tree.args.get("from")
+        if isinstance(tree, exp.Select) and frm is not None and isinstance(frm.this, exp.Subquery) \
+                and frm.this.alias == "_q":
+            tree = frm.this.this     # the validator's row-cap wrapper
+        order = tree.args.get("order") if isinstance(tree, exp.Select) else None
+        if order is None:
+            return False
+        aliases = {a.alias.lower(): a for a in tree.expressions if isinstance(a, exp.Alias)}
+        for o in order.expressions:
+            for col in o.find_all(exp.Column):
+                name = col.name.lower()
+                if name in targets:
+                    return True
+                if name in aliases and any(c.name.lower() in targets for c in aliases[name].find_all(exp.Column)):
+                    return True
+        return False
 
     def _log(self, ans: Answer) -> None:
         if not self.log_dir:

@@ -56,6 +56,7 @@ def main() -> int:
             show(dm.ask(f"{q} (I mean: {interp})"), "  -> ")
     show(dm.ask(RESTRICTED, role="DATAMIND_RESTRICTED"), "[restricted] ")
     print(f"Warmed in {time.time() - t0:.0f}s. Ask these in the same order in a fresh conversation.")
+    getattr(dm.executor, "close", lambda: None)()
     return 0
 
 

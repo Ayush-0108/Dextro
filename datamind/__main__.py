@@ -108,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "ask":
         dm = build(engine=args.engine)
         _print_answer(dm.ask(args.question, role=args.role), args.json)
+        getattr(dm.executor, "close", lambda: None)()
         return 0
 
     from .evaluation import check_gold, load_items, run_eval
@@ -135,6 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         out = report.save(ROOT / "eval" / "reports")
         print("\n" + report.markdown().split("## Failures")[0])
         print(f"Report written to {out}")
+        for ex in {id(dm.executor): dm.executor, id(gold_ex): gold_ex}.values():
+            getattr(ex, "close", lambda: None)()
         return 0
     return 2
 

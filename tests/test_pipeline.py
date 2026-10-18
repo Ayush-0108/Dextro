@@ -159,6 +159,36 @@ def test_answer_missing_a_condition_is_never_high_confidence(model, duck):
     assert a.to_json()["checks"] == a.checks
 
 
+def test_ranking_by_a_masked_value_is_not_narrated_as_a_ranking(model, duck):
+    masked_rank = ("```sql\nSELECT c.c_name, CASE WHEN 1 = 0 THEN c.c_acctbal END AS account_balance "
+                   "FROM DATAMIND_DB.TPCH.CUSTOMER c ORDER BY account_balance DESC LIMIT 5\n```")
+
+    def handler(task, prompt, opts):
+        if task == "plan":
+            return json.dumps({"plan": None, "reason": "x"})
+        if task in ("sql", "sql_alt"):
+            return masked_rank
+        if task == "narrate":
+            raise AssertionError("a masked ranking must not be narrated")
+        return make().handler(task, prompt, opts)
+    a = agent(model, duck, ScriptedLLM(handler)).ask("Top 5 customers by account balance")
+    assert a.narration == "masked" and "not meaningful" in a.message and "account_balance" in a.message
+
+
+def test_low_confidence_text_names_the_query_actually_shown(model, duck):
+    def handler(task, prompt, opts):
+        if task == "plan":
+            return json.dumps({"plan": None, "reason": "x"})
+        if task == "sql":
+            return GOOD_SQL
+        if task == "sql_alt":
+            return WRONG_SQL
+        return make().handler(task, prompt, opts)
+    a = agent(model, duck, ScriptedLLM(handler)).ask("which asian nations bought the most in 1994?")
+    assert a.confidence == "low" and a.chosen.name == "sql"
+    assert "semantic model" not in a.agreement and "wrote directly" in a.agreement
+
+
 def test_write_requests_never_reach_the_model(model, duck):
     llm = make()
     a = agent(model, duck, llm).ask("Delete all orders from 1992")
