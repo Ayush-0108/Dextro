@@ -93,3 +93,4 @@ Common rubric (30%): not mapped — its criteria aren't in CLAUDE.md; needs the 
 |---|---|---|---|---|
 | 2026-10-18 | ollama:gemma4:12b | dev (smoke 1 item) | 1/1 (100%) | Latency 217.8s, high confidence, 4 model calls |
 | 2026-10-18 | ollama gemma4:12b (thinking off) | dev sample, 20 items (all tiers) | **19/20 (95%)**; high-conf 13/13 | median 90 s/q; only failure t02 (TO_CHAR quarter) fixed in 6026dbb; report eval_20261018T162014.md |
+| 2026-10-18 | ollama gemma4:12b (thinking off) | dev, all 66 items | **62/66 (94%)**; high-conf 43/46 | median 52 s; fails j04 m02 m04 m09, each fixed afterwards (a368006, 3a7530f, c7735f5, a9c591b); report eval_20261018T170227.md |

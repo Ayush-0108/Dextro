@@ -396,7 +396,8 @@ The following results were recorded on October 18, 2026. They represent the chec
 
 | Evaluation | Result | Interpretation |
 |---|---:|---|
-| **Live accuracy, 20-question sample** | **19/20 (95%)** | Snowflake + Gemma 4 12B (Ollama), every tier represented; [report](eval/reports/eval_20261018T162014.md) |
+| **Live accuracy, full dev set** | **62/66 (94%)** | Snowflake + Gemma 4 12B (Ollama); 100% on single-table, time, follow-up, robustness, ambiguous, not-in-data, unsafe; joins 11/12, multi-step 9/12; high-confidence 43/46; median 52 s; [report](eval/reports/eval_20261018T170227.md). The 4 failures (j04, m02, m04, m09) have general fixes made after this run |
+| Live accuracy, 20-question sample | 19/20 (95%) | Snowflake + Gemma 4 12B (Ollama), every tier represented; [report](eval/reports/eval_20261018T162014.md) |
 | High-confidence answers in that sample | 13/13 correct | When Nexora says "high confidence", it was right every time (medium 1/1, low 1/2) |
 | Offline automated tests | 185/185 passed | Validates the tested components and scenarios |
 | Gold-query comparison | 52/52 matched | Expected answers matched between Snowflake and independent DuckDB SF1 |
@@ -410,7 +411,7 @@ multi-step 4, time 2, ambiguous, not-in-data, unsafe, follow-up 1 each, robustne
 except time (1/2). Median 90 s per question on a 16 GB laptop (p90 146 s), 85 Gemma calls, thinking off. The one
 failure ("revenue in each quarter of 1996") came from Gemma using `TO_CHAR(date, 'YYYY-"Q"Q')`, which Snowflake
 prints as the same label for every date; the validator now rejects that and a shape check flags a one-row
-"each quarter" answer (fixed after this run). The full 66-question run is in progress. Development questions also
+"each quarter" answer (fixed after this run). The full 66-question run gave 62/66 (see table). Development questions also
 serve as few-shot examples, with the question being scored excluded (leave-one-out), so dev accuracy can be
 optimistic; a hold-out set written by a teammate is the stronger test.
 
@@ -467,7 +468,7 @@ Evaluation reports are written under `eval/reports/`.
 
 | # | Rubric Criterion | Pts | How Nexora addresses it |
 |---|---|:---:|---|
-| 1 | **Correctness & Usefulness** | 20 | Live accuracy 19/20 on a 20-question sample across all tiers; high-confidence answers 13/13 correct. 52 gold queries verified on two engines; two independent queries plus coverage and shape checks per answer. |
+| 1 | **Correctness & Usefulness** | 20 | Live accuracy 62/66 (94%) on the full dev set (high-confidence 43/46). 52 gold queries verified on two engines; two independent queries plus coverage and shape checks per answer. |
 | 2 | **NL-to-Data Interaction** | 10 | Varied phrasing, filters, aggregations, multi-table joins, and conversation follow-ups (measured by the follow-up tier). |
 | 3 | **Evidence & Explainability** | 15 | Executed Snowflake SQL, query ID, elapsed time, AST-based explanation, and cell-by-cell numerical fact-checking. |
 | 4 | **Meaningful Snowflake Depth** | 15 | Enterprise trial, three least-privilege roles, dynamic data masking, query tags, resource monitor, Time Travel demo, stage + `COPY INTO` loading. |
@@ -505,7 +506,7 @@ The Chinook music-store dataset is the worked example ([`config/datasets/chinook
 
 ## Known Limitations
 
-- Accuracy is measured on a 20-question sample so far (19/20); the full 66-question run is in progress.
+- Measured on the 66-question development set (62/66); a teammate-written hold-out set is still to come.
 - Agreement between two query paths increases confidence but does not guarantee correctness if both paths share the same error; the coverage checks catch dropped conditions, not wrong formulas.
 - Some complex ratios, rankings, and comparisons may depend on the independent SQL-generation path when the structured plan cannot express the question.
 - The numerical checker supports selected derived values; a coincidentally matching derived number is not necessarily proof that the reasoning is correct.
