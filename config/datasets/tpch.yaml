@@ -60,7 +60,7 @@ entities:
       - {name: o_orderstatus, type: category, description: "Order status (F = all lines fulfilled, O = all open, P = partially fulfilled)", values: [F, O, P]}
       - {name: o_totalprice, type: number, description: Order total including discount and tax (USD), synonyms: [order value, order amount]}
       - {name: o_orderdate, type: date, description: Date the order was placed}
-      - {name: o_orderpriority, type: category, description: Order priority, values: [1-URGENT, 2-HIGH, 3-MEDIUM, 4-NOT SPECIFIED, 5-LOW]}
+      - {name: o_orderpriority, type: category, description: Order priority, values: [1-URGENT, 2-HIGH, 3-MEDIUM, 4-NOT SPECIFIED, 5-LOW], value_aliases: {urgent: 1-URGENT, high: 2-HIGH, medium: 3-MEDIUM, not specified: 4-NOT SPECIFIED, unspecified: 4-NOT SPECIFIED, low: 5-LOW}}
       - {name: o_clerk, type: text, description: Clerk who took the order, value_pattern: "Clerk#000000001 .. Clerk#000001000"}
       - {name: o_shippriority, type: number, description: Shipping priority (always 0)}
       - {name: o_comment, type: text, description: Free-text comment}

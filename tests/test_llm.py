@@ -195,3 +195,44 @@ def test_backend_selection(monkeypatch):
     assert make_llm("hf", cache=False).name == "hf:google/gemma-4-31B-it"
     monkeypatch.delenv("GEMMA_BACKEND", raising=False)
     assert make_llm(cache=False).name.startswith("ollama:")   # default needs no key at all
+
+
+# ---------------------------------------------------------------- Ollama backend
+from datamind.llm import GemmaOllama
+
+
+def ollama(handler):
+    return GemmaOllama(model="gemma4:12b", transport=httpx.MockTransport(handler))
+
+
+def ollama_reply(content, done_reason="stop"):
+    return httpx.Response(200, json={"message": {"role": "assistant", "content": content}, "done_reason": done_reason})
+
+
+@pytest.mark.parametrize("thinking", [False, True])
+def test_ollama_sends_think_explicitly_and_caps_length(monkeypatch, thinking):
+    monkeypatch.delenv("GEMMA_MAX_TOKENS", raising=False)
+    seen = {}
+
+    def handler(req):
+        seen.update(_json.loads(req.content))
+        return ollama_reply("ok")
+    assert ollama(handler).complete("q", thinking=thinking) == "ok"
+    assert seen["think"] is thinking                       # never left to the model's default
+    assert seen["options"]["num_predict"] == (4096 if thinking else 1536)
+
+
+def test_ollama_reports_a_reply_cut_off_by_the_cap():
+    with pytest.raises(LLMError, match="length cap"):
+        ollama(lambda req: ollama_reply("", done_reason="length")).complete("q")
+
+
+def test_ollama_drops_think_for_models_without_it():
+    bodies = []
+
+    def handler(req):
+        bodies.append(_json.loads(req.content))
+        if "think" in bodies[-1]:
+            return httpx.Response(400, json={"error": "model does not support thinking"})
+        return ollama_reply("fine")
+    assert ollama(handler).complete("q") == "fine" and "think" not in bodies[-1]

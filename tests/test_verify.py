@@ -98,3 +98,10 @@ def test_dropping_a_year_from_gold_is_caught(model):
             total += 1
             caught += bool(check_candidate(c, it["gold_sql"].replace(str(y), str(y - 1)), None))
     assert total >= 10 and caught == total
+
+
+def test_hyphenated_words_still_count(model):
+    c = question_constraints("How many urgent-priority orders came from ASIA-based customers?", model)
+    assert set(c.values.values()) == {"1-URGENT", "ASIA"}
+    issues = check_candidate(c, "SELECT COUNT(*) FROM orders WHERE o_orderpriority = 1", None)
+    assert any("1-URGENT" in i for i in issues)

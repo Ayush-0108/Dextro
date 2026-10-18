@@ -200,30 +200,41 @@ class GemmaHF(LLM):
 
 
 class GemmaOllama(LLM):
-    def __init__(self, model: str | None = None, host: str | None = None, timeout: float = 300):
+    def __init__(self, model: str | None = None, host: str | None = None, timeout: float = 300,
+                 transport: httpx.BaseTransport | None = None):
         self.model = require_gemma(model or os.getenv("GEMMA_MODEL", "gemma4:12b"))
         self.host = (host or os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
         self.name = f"ollama:{self.model}"
-        self.timeout = timeout
+        self.timeout = float(os.getenv("GEMMA_TIMEOUT_S", timeout))
+        self.http = httpx.Client(timeout=self.timeout, transport=transport)
+        self.stats = {"requests": 0, "rate_limited": 0, "waited_s": 0.0}
 
     def complete(self, prompt: str, system: str | None = None, temperature: float = 0.0,
                  thinking: bool = False, json_mode: bool = False, sample: int = 0) -> str:
         messages = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
-        body: dict[str, Any] = {"model": self.model, "messages": messages, "stream": False,
-                                "options": {"temperature": temperature, "seed": 7 + sample, "num_ctx": 16384}}
+        # Gemma 4 on Ollama thinks unless told not to, and nothing else bounds the reply: an uncapped call measured
+        # 2,892 tokens / 233 s for a one-line plan. So `think` is always explicit and the reply length is capped.
+        cap = int(os.getenv("GEMMA_MAX_TOKENS", "4096" if thinking else "1536"))
+        body: dict[str, Any] = {"model": self.model, "messages": messages, "stream": False, "think": bool(thinking),
+                                "options": {"temperature": temperature, "seed": 7 + sample, "num_ctx": 16384,
+                                            "num_predict": cap}}
         if json_mode:
             body["format"] = "json"
-        if thinking:
-            body["think"] = True
         try:
-            r = httpx.post(f"{self.host}/api/chat", json=body, timeout=self.timeout)
-            if r.status_code >= 400 and "think" in r.text.lower() and thinking:
+            self.stats["requests"] += 1
+            r = self.http.post(f"{self.host}/api/chat", json=body)
+            if r.status_code >= 400 and "think" in r.text.lower():   # model without a thinking switch
                 body.pop("think")
-                r = httpx.post(f"{self.host}/api/chat", json=body, timeout=self.timeout)
+                r = self.http.post(f"{self.host}/api/chat", json=body)
             r.raise_for_status()
-            return r.json()["message"]["content"]
+            data = r.json()
         except httpx.HTTPError as e:
             raise LLMError(f"Ollama call failed ({self.host}): {e}") from e
+        text = (data.get("message") or {}).get("content") or ""
+        if not text.strip():
+            why = "the reply hit the length cap" if data.get("done_reason") == "length" else "empty reply"
+            raise LLMError(f"Ollama returned no answer ({why}); raise GEMMA_MAX_TOKENS or set GEMMA_THINKING=0")
+        return text
 
 
 class CachedLLM(LLM):

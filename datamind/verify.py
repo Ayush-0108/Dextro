@@ -72,7 +72,8 @@ def question_constraints(question: str, model: SemanticModel) -> Constraints:
     # known category values, longest first so "REG AIR" wins over "AIR"
     masked = q
     for term in sorted(_value_terms(model), key=len, reverse=True):
-        pat = re.compile(rf"(?<![\w#-]){re.escape(term)}(?![\w#-])", re.I)
+        # whole words; "urgent-priority" / "ASIA-based" count, codes like "1-URGENT" or "Brand#23" don't
+        pat = re.compile(rf"(?<![\w#])(?<!\d-){re.escape(term)}(?![\w#])(?!-\d)", re.I)
         hit = pat.search(masked)
         if hit:
             cons.values[hit.group(0)] = _value_terms(model)[term]
