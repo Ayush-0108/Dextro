@@ -135,17 +135,17 @@ SHOW GRANTS TO ROLE DATAMIND_AGENT;
 -- USE ROLE DATAMIND_RESTRICTED; SELECT C_NAME, C_PHONE, C_ACCTBAL FROM DATAMIND_DB.TPCH.CUSTOMER LIMIT 3;
 
 -- -------------------------------------------------------------------------------------
--- 7. Recommended: a dedicated app user that holds ONLY the agent roles.
---    Uncomment, choose a strong password, and put it in .env (never commit it).
---    Trial accounts allow password sign-in for this user; on paid accounts use key-pair auth
---    (TYPE = SERVICE, RSA_PUBLIC_KEY = '...') and SNOWFLAKE_PRIVATE_KEY_FILE in .env.
+-- 7. The app user: holds ONLY the agent roles and signs in with a key pair, not a password.
+--    TYPE = SERVICE users cannot have passwords, so Snowflake's MFA requirement for people
+--    doesn't apply to the app. After this script, run on your laptop:
+--        python scripts/make_keypair.py
+--    and paste the ALTER USER statement it prints into this worksheet.
 -- -------------------------------------------------------------------------------------
--- USE ROLE ACCOUNTADMIN;
--- CREATE USER IF NOT EXISTS DATAMIND_APP
---   PASSWORD = '<choose-a-strong-password>'
---   DEFAULT_ROLE = DATAMIND_AGENT
---   DEFAULT_WAREHOUSE = DATAMIND_WH
---   MUST_CHANGE_PASSWORD = FALSE
---   COMMENT = 'DataMind application user (read-only roles only)';
--- GRANT ROLE DATAMIND_AGENT TO USER DATAMIND_APP;
--- GRANT ROLE DATAMIND_RESTRICTED TO USER DATAMIND_APP;
+USE ROLE ACCOUNTADMIN;
+CREATE USER IF NOT EXISTS DATAMIND_APP
+  TYPE = SERVICE
+  DEFAULT_ROLE = DATAMIND_AGENT
+  DEFAULT_WAREHOUSE = DATAMIND_WH
+  COMMENT = 'DataMind application user (read-only roles only, key-pair sign-in)';
+GRANT ROLE DATAMIND_AGENT TO USER DATAMIND_APP;
+GRANT ROLE DATAMIND_RESTRICTED TO USER DATAMIND_APP;

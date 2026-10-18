@@ -19,6 +19,11 @@ _Last updated: 2026-10-18 (session 2: Phase 0 audit + fixes)_
   masked aggregates, Snowflake reconnect + per-query role, Gemini timeout/retry/system-instruction fallback.
 - Snowflake trial account created (2026-10-18, $400 credits, trial ends ~2026-11-17). Details in `CLAUDE.local.md`.
 
+## Verified live (2026-10-18)
+- Snowflake trial: region AWS_AP_SOUTH_1, **Enterprise or higher** (masking policy created), sample TPCH_SF1 present
+  (1,500,000 orders). The owner's user is TYPE null with a password and no MFA, so the app uses a separate
+  `DATAMIND_APP` TYPE = SERVICE user with key-pair sign-in (audit C1).
+
 ## Verified only offline (not yet against live services)
 - `snowflake/01_setup.sql` has not been run on a real account yet.
 - Prompts have not been run against real Gemma; expect a tuning round after the first eval.

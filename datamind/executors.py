@@ -94,7 +94,10 @@ class SnowflakeExecutor:
         pw = password or os.getenv("SNOWFLAKE_PASSWORD")
         auth = authenticator or os.getenv("SNOWFLAKE_AUTHENTICATOR")
         if pk_file:
-            self.params["private_key_file"] = pk_file
+            pk = Path(pk_file).expanduser()
+            if not pk.is_absolute():   # relative paths in .env are relative to the repository
+                pk = Path(__file__).resolve().parent.parent / pk
+            self.params["private_key_file"] = str(pk)
             pp = private_key_passphrase or os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
             if pp:
                 self.params["private_key_file_pwd"] = pp

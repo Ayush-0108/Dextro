@@ -83,3 +83,20 @@ def test_role_travels_with_each_query(fake_connect):
 def test_only_agent_roles_are_allowed(fake_connect):
     with pytest.raises(ValueError):
         executor().run("SELECT 1", role="ACCOUNTADMIN")
+
+
+def test_keypair_script_writes_a_loadable_key(tmp_path):
+    from cryptography.hazmat.primitives import serialization
+    from make_keypair import make
+    body = make(tmp_path, passphrase=None)
+    key = serialization.load_pem_private_key((tmp_path / "rsa_key.p8").read_bytes(), password=None)
+    assert key.key_size == 2048 and body and "-----" not in body
+    with pytest.raises(SystemExit):
+        make(tmp_path, passphrase=None)   # never silently replaces a working key
+
+
+def test_relative_key_path_is_resolved_from_repo_root():
+    from pathlib import Path
+    ex = SnowflakeExecutor(account="a", user="u", private_key_file="keys/rsa_key.p8")
+    p = Path(ex.params["private_key_file"])
+    assert p.is_absolute() and p.parts[-2:] == ("keys", "rsa_key.p8") and "password" not in ex.params

@@ -69,9 +69,11 @@ pip install -r requirements.txt
 1. **Snowflake** — open a Snowsight SQL worksheet as ACCOUNTADMIN and run [`snowflake/01_setup.sql`](snowflake/01_setup.sql)
    top to bottom (about 2 minutes). It creates an X-Small warehouse with auto-suspend and a daily credit cap,
    three roles, the `DATAMIND_DB.TPCH` schema (copied from Snowflake's TPC-H sample data), masking policies and read-only grants.
-   Optionally create the dedicated `DATAMIND_APP` user (section 7 of the script).
-2. **Configure** — `cp .env.example .env` and fill in `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PASSWORD`
-   (or a key file) and `GEMINI_API_KEY`.
+   It also creates the read-only `DATAMIND_APP` service user the app signs in as.
+2. **Configure** — `python scripts/make_keypair.py` creates `keys/rsa_key.p8` (git-ignored) and prints an
+   `ALTER USER DATAMIND_APP SET RSA_PUBLIC_KEY = ...` statement: run it once in Snowsight. Then
+   `cp .env.example .env` and fill in `SNOWFLAKE_ACCOUNT` and `GEMINI_API_KEY`. The app user is a
+   `TYPE = SERVICE` user with key-pair sign-in, so Snowflake's MFA requirement for people doesn't block it.
 3. **Check** — `python -m datamind check` runs one query in Snowflake and one Gemma call.
 4. **Run the app** — `streamlit run app/streamlit_app.py`
 5. **Or the CLI** — `python -m datamind ask "What was revenue by customer region in 1996?"`
