@@ -24,6 +24,11 @@ _Last updated: 2026-10-18 (end of session 2). Team repo: https://github.com/ZERO
 - Agent role reads; restricted role sees email/phone masked; agent DELETE blocked (insufficient privileges).
 - `check-gold --independent duckdb` on eval/chinook_dev.yaml: all 16 gold queries match.
 
+## Verified live — Docker (2026-10-18)
+- `docker compose build` succeeded (python:3.12-slim). The image contains no .env, keys, private, data or .git.
+- Container run: health check ok; live status showed Snowflake connected (DATAMIND_WH, AWS_AP_SOUTH_1) and Ollama
+  gemma4:12b reachable via host.docker.internal; a warmed demo question answered in 0.6 s with a live Snowflake query.
+
 ## Not verified / Pending
 - `snowflake/10_chinook_setup.sql` needs to be run in Snowsight as `ACCOUNTADMIN`, followed by `scripts/load_chinook.py`.
 - Full eval baseline across all 52 dev queries and Chinook dev queries (local Ollama takes ~218s/question; 31B via Hugging Face is the faster option — Google AI Studio is ruled out by the jury).
