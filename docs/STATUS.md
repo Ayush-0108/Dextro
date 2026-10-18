@@ -19,7 +19,7 @@ _Last updated: 2026-10-18 (end of session 2). Team repo: https://github.com/ZERO
 
 ## Not verified / Pending
 - `snowflake/10_chinook_setup.sql` needs to be run in Snowsight as `ACCOUNTADMIN`, followed by `scripts/load_chinook.py`.
-- Full eval baseline across all 52 dev queries and Chinook dev queries (local Ollama takes ~218s/question; candidate for Google AI Studio API key).
+- Full eval baseline across all 52 dev queries and Chinook dev queries (local Ollama takes ~218s/question; 31B via Hugging Face is the faster option — Google AI Studio is ruled out by the jury).
 - Streamlit app not opened against live services.
 - Participant guide PDF not read: `private/` does not exist on this Mac. Rubric below comes from `CLAUDE.md`'s summary.
 
@@ -73,13 +73,13 @@ Common rubric (30%): not mapped — its criteria aren't in CLAUDE.md; needs the 
 
 ## Next (in order)
 1. Run `snowflake/10_chinook_setup.sql` in Snowsight as ACCOUNTADMIN, then run `scripts/load_chinook.py`.
-2. Evaluate speed options: local Ollama (`gemma4:12b` at ~218s/question) vs. Google AI Studio API (`gemma-4-31b-it` at ~5s/question).
+2. Run the full eval: local Ollama `gemma4:12b` (~218 s/question measured, ~7 h with paraphrases) or Hugging Face `google/gemma-4-31B-it` (speed not yet measured; est. ~$0.5–0.6 per full TPC-H run).
 3. Run full baseline eval (`python -m datamind eval --paraphrases` and Chinook eval) and triage any failures.
 
 ## Open questions (ask Kanhaiya)
 - Deadline and judging dates? Team members/roles; who writes the hold-out set?
 - Run `snowflake/10_chinook_setup.sql` in Snowsight?
-- Should we switch to Gemini/AI Studio API key for `gemma-4-31b-it` to run the 52+ item evaluation in minutes instead of hours?
+- Buy Hugging Face credits (or PRO) for 31B, or run the 12B eval locally in batches? (Jury: no Google AI Studio; 31B must come from Hugging Face.)
 
 ## Eval results log
 | Date | Model | Split | Overall | Notes |
