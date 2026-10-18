@@ -1,0 +1,10 @@
+[project]
+name = "datamind"
+version = "0.1.0"
+description = "Ask questions of Snowflake data in plain English; answers computed by SQL, cross-checked, and traceable to rows."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

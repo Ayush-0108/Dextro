@@ -1,0 +1,286 @@
+# Semantic model for the TPC-H wholesale supplier dataset.
+# Data: Snowflake sample data SNOWFLAKE_SAMPLE_DATA.TPCH_SF1, copied into DATAMIND_DB.TPCH by snowflake/01_setup.sql.
+# To add a new dataset, copy this file, describe its tables/joins/metrics, and point DATAMIND_DATASET at it.
+name: tpch
+title: Wholesale parts supplier (TPC-H)
+description: >
+  A wholesale supplier sells parts to customers in 25 nations. Customers place orders; each order has
+  one or more line items, each for one part from one supplier. Prices are in US dollars.
+database: DATAMIND_DB
+schema: TPCH
+data_coverage: >
+  Orders dated 1992-01-01 to 1998-08-02; ship dates to 1998-12-01. 1.5M orders, 6.0M order lines,
+  150K customers, 10K suppliers, 200K parts. 1998 is a partial year (orders stop on 1998-08-02).
+notes:
+  - "Revenue means net revenue: SUM(l_extendedprice * (1 - l_discount)) unless the user says gross or with tax."
+  - "Customer location is customer -> cust_nation -> cust_region. Supplier location is supplier -> supp_nation -> supp_region. Never mix them."
+  - "A line item is late when l_receiptdate > l_commitdate. A line item is returned when l_returnflag = 'R'."
+  - "o_totalprice is the order total including tax; do not add it to line-level revenue."
+  - "Order dates live on orders.o_orderdate; ship/commit/receipt dates live on lineitem."
+  - "Unless the user names another date, a year or period refers to the order date (orders.o_orderdate)."
+  - "Profit (supplier margin) = SUM(l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity), joining lineitem to partsupp."
+sample_questions:
+  - What was total revenue in 1995?
+  - Which 5 nations generated the most revenue from customers in ASIA in 1994?
+  - How many orders were placed each year?
+  - What share of line items shipped by AIR were late?
+  - Which suppliers have the highest profit on BRASS parts?
+  - Who are the top 10 customers by revenue in the BUILDING segment?
+
+entities:
+  - alias: lineitem
+    table: LINEITEM
+    description: One row per order line (an order's purchase of one part from one supplier)
+    primary_key: [l_orderkey, l_linenumber]
+    columns:
+      - {name: l_orderkey, type: id, description: Order key; links to orders}
+      - {name: l_partkey, type: id, description: Part key; links to part}
+      - {name: l_suppkey, type: id, description: Supplier key; links to supplier}
+      - {name: l_linenumber, type: id, description: Line number within the order (1-7)}
+      - {name: l_quantity, type: number, description: Quantity of units ordered (1-50), synonyms: [units, qty]}
+      - {name: l_extendedprice, type: number, description: Line price before discount and tax (USD), synonyms: [gross line amount]}
+      - {name: l_discount, type: number, description: Discount as a fraction (0.00-0.10)}
+      - {name: l_tax, type: number, description: Tax as a fraction (0.00-0.08)}
+      - {name: l_returnflag, type: category, description: "Return flag (R = returned, A = accepted, N = not yet known)", values: [A, N, R]}
+      - {name: l_linestatus, type: category, description: "Line status (F = fulfilled/shipped, O = open)", values: [F, O]}
+      - {name: l_shipdate, type: date, description: Date the line shipped}
+      - {name: l_commitdate, type: date, description: Date the supplier committed to deliver}
+      - {name: l_receiptdate, type: date, description: Date the customer received the line}
+      - {name: l_shipinstruct, type: category, description: Shipping instruction, values: [COLLECT COD, DELIVER IN PERSON, NONE, TAKE BACK RETURN]}
+      - {name: l_shipmode, type: category, description: Shipping mode, synonyms: [transport, shipping method], values: [AIR, FOB, MAIL, RAIL, REG AIR, SHIP, TRUCK]}
+      - {name: l_comment, type: text, description: Free-text comment}
+
+  - alias: orders
+    table: ORDERS
+    description: One row per customer order
+    primary_key: [o_orderkey]
+    columns:
+      - {name: o_orderkey, type: id, description: Order key}
+      - {name: o_custkey, type: id, description: Customer key; links to customer}
+      - {name: o_orderstatus, type: category, description: "Order status (F = all lines fulfilled, O = all open, P = partially fulfilled)", values: [F, O, P]}
+      - {name: o_totalprice, type: number, description: Order total including discount and tax (USD), synonyms: [order value, order amount]}
+      - {name: o_orderdate, type: date, description: Date the order was placed}
+      - {name: o_orderpriority, type: category, description: Order priority, values: [1-URGENT, 2-HIGH, 3-MEDIUM, 4-NOT SPECIFIED, 5-LOW]}
+      - {name: o_clerk, type: text, description: Clerk who took the order, value_pattern: "Clerk#000000001 .. Clerk#000001000"}
+      - {name: o_shippriority, type: number, description: Shipping priority (always 0)}
+      - {name: o_comment, type: text, description: Free-text comment}
+
+  - alias: customer
+    table: CUSTOMER
+    description: One row per customer
+    primary_key: [c_custkey]
+    columns:
+      - {name: c_custkey, type: id, description: Customer key}
+      - {name: c_name, type: text, description: Customer name, value_pattern: "Customer#000000001 .. Customer#000150000"}
+      - {name: c_address, type: text, description: Street address}
+      - {name: c_nationkey, type: id, description: Nation key of the customer; links to cust_nation}
+      - {name: c_phone, type: text, description: Phone number, sensitive: true}
+      - {name: c_acctbal, type: number, description: Account balance (USD; can be negative), synonyms: [balance], sensitive: true}
+      - {name: c_mktsegment, type: category, description: Market segment, synonyms: [segment, industry], values: [AUTOMOBILE, BUILDING, FURNITURE, HOUSEHOLD, MACHINERY]}
+      - {name: c_comment, type: text, description: Free-text comment}
+
+  - alias: cust_nation
+    table: NATION
+    description: The customer's nation
+    primary_key: [n_nationkey]
+    columns:
+      - {name: n_nationkey, type: id, description: Nation key}
+      - {name: n_name, type: category, description: Customer nation name, synonyms: [customer country], value_aliases: {USA: UNITED STATES, US: UNITED STATES, U.S.: UNITED STATES, United States of America: UNITED STATES, UK: UNITED KINGDOM, Britain: UNITED KINGDOM, Great Britain: UNITED KINGDOM, England: UNITED KINGDOM}, values: [ALGERIA, ARGENTINA, BRAZIL, CANADA, CHINA, EGYPT, ETHIOPIA, FRANCE, GERMANY, INDIA, INDONESIA, IRAN, IRAQ, JAPAN, JORDAN, KENYA, MOROCCO, MOZAMBIQUE, PERU, ROMANIA, RUSSIA, SAUDI ARABIA, UNITED KINGDOM, UNITED STATES, VIETNAM]}
+      - {name: n_regionkey, type: id, description: Region key; links to cust_region}
+      - {name: n_comment, type: text, description: Free-text comment}
+
+  - alias: cust_region
+    table: REGION
+    description: The customer's region
+    primary_key: [r_regionkey]
+    columns:
+      - {name: r_regionkey, type: id, description: Region key}
+      - {name: r_name, type: category, description: Customer region name, synonyms: [customer continent], values: [AFRICA, AMERICA, ASIA, EUROPE, MIDDLE EAST]}
+      - {name: r_comment, type: text, description: Free-text comment}
+
+  - alias: supplier
+    table: SUPPLIER
+    description: One row per supplier
+    primary_key: [s_suppkey]
+    columns:
+      - {name: s_suppkey, type: id, description: Supplier key}
+      - {name: s_name, type: text, description: Supplier name, value_pattern: "Supplier#000000001 .. Supplier#000010000"}
+      - {name: s_address, type: text, description: Street address}
+      - {name: s_nationkey, type: id, description: Nation key of the supplier; links to supp_nation}
+      - {name: s_phone, type: text, description: Phone number, sensitive: true}
+      - {name: s_acctbal, type: number, description: Supplier account balance (USD)}
+      - {name: s_comment, type: text, description: Free-text comment}
+
+  - alias: supp_nation
+    table: NATION
+    description: The supplier's nation
+    primary_key: [n_nationkey]
+    columns:
+      - {name: n_nationkey, type: id, description: Nation key}
+      - {name: n_name, type: category, description: Supplier nation name, synonyms: [supplier country], value_aliases: {USA: UNITED STATES, US: UNITED STATES, U.S.: UNITED STATES, United States of America: UNITED STATES, UK: UNITED KINGDOM, Britain: UNITED KINGDOM, Great Britain: UNITED KINGDOM, England: UNITED KINGDOM}, values: [ALGERIA, ARGENTINA, BRAZIL, CANADA, CHINA, EGYPT, ETHIOPIA, FRANCE, GERMANY, INDIA, INDONESIA, IRAN, IRAQ, JAPAN, JORDAN, KENYA, MOROCCO, MOZAMBIQUE, PERU, ROMANIA, RUSSIA, SAUDI ARABIA, UNITED KINGDOM, UNITED STATES, VIETNAM]}
+      - {name: n_regionkey, type: id, description: Region key; links to supp_region}
+      - {name: n_comment, type: text, description: Free-text comment}
+
+  - alias: supp_region
+    table: REGION
+    description: The supplier's region
+    primary_key: [r_regionkey]
+    columns:
+      - {name: r_regionkey, type: id, description: Region key}
+      - {name: r_name, type: category, description: Supplier region name, synonyms: [supplier continent], values: [AFRICA, AMERICA, ASIA, EUROPE, MIDDLE EAST]}
+      - {name: r_comment, type: text, description: Free-text comment}
+
+  - alias: part
+    table: PART
+    description: One row per part (product)
+    primary_key: [p_partkey]
+    columns:
+      - {name: p_partkey, type: id, description: Part key}
+      - {name: p_name, type: text, description: "Part name (five colour words, e.g. 'goldenrod lavender spring chocolate lace')"}
+      - {name: p_mfgr, type: category, description: Manufacturer, values: [Manufacturer#1, Manufacturer#2, Manufacturer#3, Manufacturer#4, Manufacturer#5]}
+      - {name: p_brand, type: text, description: Brand, value_pattern: "Brand#11 .. Brand#55 (first digit = manufacturer)"}
+      - {name: p_type, type: text, description: "Part type", value_pattern: "three words: {STANDARD|SMALL|MEDIUM|LARGE|ECONOMY|PROMO} {ANODIZED|BURNISHED|PLATED|POLISHED|BRUSHED} {TIN|NICKEL|BRASS|STEEL|COPPER}; filter one word with ILIKE '%BRASS%'"}
+      - {name: p_size, type: number, description: Size (1-50)}
+      - {name: p_container, type: text, description: Container, value_pattern: "{SM|MED|LG|JUMBO|WRAP} {CASE|BOX|BAG|JAR|PKG|PACK|CAN|DRUM}, e.g. 'LG BOX'"}
+      - {name: p_retailprice, type: number, description: List retail price (USD)}
+      - {name: p_comment, type: text, description: Free-text comment}
+
+  - alias: partsupp
+    table: PARTSUPP
+    description: One row per (part, supplier) offer with the supplier's cost and stock
+    primary_key: [ps_partkey, ps_suppkey]
+    columns:
+      - {name: ps_partkey, type: id, description: Part key; links to part}
+      - {name: ps_suppkey, type: id, description: Supplier key; links to supplier}
+      - {name: ps_availqty, type: number, description: Units available in stock at this supplier, synonyms: [stock, inventory]}
+      - {name: ps_supplycost, type: number, description: Supplier's cost per unit (USD), synonyms: [unit cost]}
+      - {name: ps_comment, type: text, description: Free-text comment}
+
+joins:
+  - {many: lineitem, one: orders, keys: [[l_orderkey, o_orderkey]]}
+  - {many: lineitem, one: part, keys: [[l_partkey, p_partkey]]}
+  - {many: lineitem, one: supplier, keys: [[l_suppkey, s_suppkey]]}
+  - {many: lineitem, one: partsupp, keys: [[l_partkey, ps_partkey], [l_suppkey, ps_suppkey]]}
+  - {many: partsupp, one: part, keys: [[ps_partkey, p_partkey]]}
+  - {many: partsupp, one: supplier, keys: [[ps_suppkey, s_suppkey]]}
+  - {many: orders, one: customer, keys: [[o_custkey, c_custkey]]}
+  - {many: customer, one: cust_nation, keys: [[c_nationkey, n_nationkey]]}
+  - {many: cust_nation, one: cust_region, keys: [[n_regionkey, r_regionkey]]}
+  - {many: supplier, one: supp_nation, keys: [[s_nationkey, n_nationkey]]}
+  - {many: supp_nation, one: supp_region, keys: [[n_regionkey, r_regionkey]]}
+
+metrics:
+  - name: revenue
+    expr: SUM(lineitem.l_extendedprice * (1 - lineitem.l_discount))
+    grain: lineitem
+    description: Net revenue after discount, excluding tax (USD)
+    synonyms: [sales, net revenue, net sales, turnover]
+    format: currency
+  - name: gross_revenue
+    expr: SUM(lineitem.l_extendedprice)
+    grain: lineitem
+    description: Revenue before discount and tax (USD)
+    synonyms: [gross sales, list revenue]
+    format: currency
+  - name: revenue_with_tax
+    expr: SUM(lineitem.l_extendedprice * (1 - lineitem.l_discount) * (1 + lineitem.l_tax))
+    grain: lineitem
+    description: Net revenue including tax (USD)
+    synonyms: [billed amount, charge]
+    format: currency
+  - name: profit
+    expr: SUM(lineitem.l_extendedprice * (1 - lineitem.l_discount) - partsupp.ps_supplycost * lineitem.l_quantity)
+    grain: lineitem
+    description: Net revenue minus supplier cost of the units sold (USD)
+    synonyms: [margin, gross profit]
+    format: currency
+  - name: units_sold
+    expr: SUM(lineitem.l_quantity)
+    grain: lineitem
+    description: Total units ordered
+    synonyms: [quantity, volume]
+    format: integer
+  - name: line_count
+    expr: COUNT(*)
+    grain: lineitem
+    description: Number of order lines
+    synonyms: [line items, order lines]
+    format: integer
+  - name: late_line_count
+    expr: SUM(CASE WHEN lineitem.l_receiptdate > lineitem.l_commitdate THEN 1 ELSE 0 END)
+    grain: lineitem
+    description: Number of order lines received after the committed date
+    synonyms: [late deliveries, late lines]
+    format: integer
+  - name: late_line_rate
+    expr: AVG(CASE WHEN lineitem.l_receiptdate > lineitem.l_commitdate THEN 1.0 ELSE 0.0 END)
+    grain: lineitem
+    description: Fraction of order lines received late (0-1)
+    synonyms: [late rate, late share]
+    format: percent
+  - name: returned_line_count
+    expr: SUM(CASE WHEN lineitem.l_returnflag = 'R' THEN 1 ELSE 0 END)
+    grain: lineitem
+    description: Number of order lines that were returned
+    synonyms: [returns]
+    format: integer
+  - name: avg_discount
+    expr: AVG(lineitem.l_discount)
+    grain: lineitem
+    description: Average discount fraction per order line
+    format: percent
+  - name: order_count
+    expr: COUNT(DISTINCT orders.o_orderkey)
+    grain: orders
+    fanout_safe: true
+    description: Number of distinct orders
+    synonyms: [orders, number of orders]
+    format: integer
+  - name: total_order_value
+    expr: SUM(orders.o_totalprice)
+    grain: orders
+    description: Sum of order totals including tax (USD)
+    format: currency
+  - name: avg_order_value
+    expr: AVG(orders.o_totalprice)
+    grain: orders
+    description: Average order total including tax (USD)
+    synonyms: [AOV, average order size]
+    format: currency
+  - name: customer_count
+    expr: COUNT(DISTINCT customer.c_custkey)
+    grain: customer
+    fanout_safe: true
+    description: Number of distinct customers
+    synonyms: [customers, number of customers]
+    format: integer
+  - name: avg_account_balance
+    expr: AVG(customer.c_acctbal)
+    grain: customer
+    description: Average customer account balance (USD)
+    format: currency
+  - name: supplier_count
+    expr: COUNT(DISTINCT supplier.s_suppkey)
+    grain: supplier
+    fanout_safe: true
+    description: Number of distinct suppliers
+    synonyms: [suppliers, number of suppliers]
+    format: integer
+  - name: part_count
+    expr: COUNT(DISTINCT part.p_partkey)
+    grain: part
+    fanout_safe: true
+    description: Number of distinct parts
+    synonyms: [parts, products, number of parts]
+    format: integer
+  - name: stock_units
+    expr: SUM(partsupp.ps_availqty)
+    grain: partsupp
+    description: Units available in stock across supplier offers
+    synonyms: [inventory, stock]
+    format: integer
+  - name: avg_supply_cost
+    expr: AVG(partsupp.ps_supplycost)
+    grain: partsupp
+    description: Average supplier unit cost across offers (USD)
+    format: currency

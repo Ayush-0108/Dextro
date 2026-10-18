@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest==9.1.1
+tpchgen-cli==3.0.0     # generates official TPC-H data locally for tests / independent gold answers

@@ -1,0 +1,19 @@
+.env
+*.p8
+*.pem
+keys/
+.cache/
+runs/
+data/*
+!data/README.md
+eval/reports/*.json
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
+CLAUDE.local.md
+
+# Organisers' participant guide (not ours to redistribute)
+private/

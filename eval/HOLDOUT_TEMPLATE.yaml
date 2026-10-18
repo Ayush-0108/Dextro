@@ -1,0 +1,25 @@
+# HOLD-OUT evaluation set — simulates the judges' unseen questions.
+#
+# Rules (this is what makes the number honest):
+#  1. Written by a teammate who does NOT edit prompts, the semantic model or the dev set.
+#  2. Write the question first, then the gold SQL by hand, without running DataMind on it.
+#  3. Never copy these questions into tpch_dev.yaml or any prompt. Never tune on failures here;
+#     if a failure reveals a bug, write a NEW similar question into the dev set and fix against that.
+#  4. Mix tiers like the judges will: ~30% joins, ~30% multi-step, ~15% time, ~25% single table,
+#     plus a few ambiguous / not-in-data / unsafe questions. Vary phrasing (casual, terse, verbose).
+#
+# Copy to eval/tpch_holdout.yaml, set split: holdout, then:
+#   python -m datamind eval --file eval/tpch_holdout.yaml
+dataset: tpch
+items:
+  - id: h01
+    split: holdout
+    tier: join
+    question: "<your question>"
+    gold_sql: |
+      SELECT ...
+  - id: h02
+    split: holdout
+    tier: ambiguous
+    question: "<an ambiguous question>"
+    expect: clarify_or_assume

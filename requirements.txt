@@ -1,0 +1,10 @@
+# Runtime (pinned; tested on Python 3.11-3.13)
+snowflake-connector-python==5.0.0
+google-genai==2.31.0
+httpx==0.28.1
+sqlglot==30.23.0
+pydantic==2.13.5
+PyYAML==6.0.3
+streamlit==1.66.0
+pandas==3.0.5
+duckdb==1.5.6          # offline tests and independent ground-truth computation only
