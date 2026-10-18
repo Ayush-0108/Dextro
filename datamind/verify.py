@@ -30,6 +30,13 @@ _PER_GROUP = re.compile(r"\b(each|per|every)\b", re.I)
 _SINGLE = re.compile(r"^\s*(?:how many|how much|what (?:is|was|were) (?:the )?(?:total|average|overall|sum|count|number)\b)",
                      re.I)
 _GROUPING = re.compile(r"\b(each|per|by|every|breakdown|split|list|which|across|versus|vs|compare|and in)\b", re.I)
+_SUPERLATIVE = re.compile(r"\bthe\s+(?:most|highest|largest|biggest|greatest|lowest|least|fewest|smallest|best|"
+                          r"worst|top)\b", re.I)
+# "which supplier nation supplied", "in which year was", "who generated": a singular subject wants one answer
+_SINGULAR_SUBJECT = re.compile(r"\b(?:which|what)\s+((?:[a-z]+\s+){0,2}?[a-z]+)\s+(?:had|has|was|is|did|does|placed|"
+                               r"supplied|generated|made|sold|bought|shipped|received|earned|spent|ordered|"
+                               r"contributed|brought)\b|^\s*who\s+(?:had|has|was|is|placed|supplied|generated|made|"
+                               r"sold|bought|shipped|received|earned|spent|ordered)\b", re.I)
 _PERIOD_BREAKDOWN = re.compile(r"\b(?:each|every|per|by)\s+(quarter|month|week|year)\b"
                                r"|\b(quarterly|monthly|weekly|yearly|annually)\b", re.I)
 _TIME_UNIT = re.compile(r"^\s*(?:day|week|month|quarter|year|hour|minute)s?\b", re.I)
@@ -75,6 +82,11 @@ def question_constraints(question: str, model: SemanticModel) -> Constraints:
     if m and not _PER_GROUP.search(q):
         cons.top_n = int(m.group(1) or m.group(2))
     cons.single_value = bool(_SINGLE.search(q)) and not _GROUPING.search(q)
+    if cons.top_n is None and _SUPERLATIVE.search(q) and not _PER_GROUP.search(q):
+        subj = _SINGULAR_SUBJECT.search(q)
+        noun = (subj.group(1) or "").split()[-1].lower() if subj and subj.group(1) else ("who" if subj else "")
+        if subj and not (noun.endswith("s") and not noun.endswith("ss")):
+            cons.top_n = 1          # "which nation ... the most" asks for one nation, not a ranking
     pb = _PERIOD_BREAKDOWN.search(q)
     if pb:
         word = (pb.group(1) or pb.group(2)).lower()
@@ -132,7 +144,8 @@ def check_candidate(cons: Constraints, sql: str, result: QueryResult | None) -> 
     if result is not None and result.ok:
         n = result.row_count
         if cons.top_n is not None and n > cons.top_n:
-            issues.append(f"the question asks for the top {cons.top_n} but the query returned {n} rows")
+            want = "a single top result" if cons.top_n == 1 else f"the top {cons.top_n}"
+            issues.append(f"the question asks for {want} but the query returned {n} rows")
         if cons.single_value and n > 1:
             issues.append(f"the question asks for a single number but the query returned {n} rows")
         if cons.period_breakdown and n == 1:
@@ -182,7 +195,7 @@ def coverage_report(cons: Constraints, sql: str, result: QueryResult | None) -> 
     rows = "" if n is None else f"{n} row{'s' if n != 1 else ''}"
     if cons.top_n is not None:
         lim = next((t for name, t in clauses if name == "LIMIT"), "")
-        items.append({"asked": f"top {cons.top_n}", "found": n is not None and n <= cons.top_n,
+        items.append({"asked": "the single top result" if cons.top_n == 1 else f"top {cons.top_n}", "found": n is not None and n <= cons.top_n,
                       "where": f"{lim.upper()}, {rows}" if lim else rows})
     if cons.single_value:
         items.append({"asked": "a single number", "found": n == 1, "where": rows})

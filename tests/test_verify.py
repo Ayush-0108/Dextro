@@ -142,3 +142,22 @@ def test_coverage_report_agrees_with_the_checks_on_gold(request, dataset, eval_f
             for q in [it["question"], *it.get("paraphrases", [])]:
                 rep = coverage_report(question_constraints(q, m), it["gold_sql"], res)
                 assert all(i["found"] for i in rep), (it["id"], q, rep)
+
+
+@pytest.mark.parametrize("q,top", [
+    ("Which supplier nation supplied the most units for orders placed in 1994?", 1),
+    ("In which year was revenue the highest, and how much was it?", 1),
+    ("In 1994, suppliers from which country shipped the largest quantity?", 1),
+    ("Who generated the most revenue in July 1998?", 1),
+    ("Which customers placed the most orders in 1997?", None),     # plural: a ranking is fine
+    ("Who are our best customers?", None),
+    ("Which 5 nations generated the most revenue?", 5),
+])
+def test_singular_superlative_wants_one_row(model, q, top):
+    assert question_constraints(q, model).top_n == top
+
+
+def test_a_full_ranking_for_a_singular_superlative_is_flagged(model):
+    c = question_constraints("Which supplier nation supplied the most units for orders placed in 1994?", model)
+    assert "a single top result" in check_candidate(c, "SELECT 1 /* 1994 */", rows(25))[0]
+    assert check_candidate(c, "SELECT 1 /* 1994 */ LIMIT 1", rows(1)) == []
