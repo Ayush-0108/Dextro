@@ -5,6 +5,7 @@ import datetime as dt
 from decimal import Decimal
 
 import pytest
+import sqlglot
 
 from datamind.compare import results_match
 from datamind.explain import explain_sql
@@ -46,6 +47,76 @@ def test_fanout_guard_blocks_double_counting(model):
     # average order value is an order-level metric; grouping by part needs line-level rows
     with pytest.raises(PlanError, match="double count"):
         compile_plan(QueryPlan.model_validate({"metrics": ["avg_order_value"], "dimensions": ["part.p_mfgr"]}), model)
+
+
+@pytest.mark.parametrize("extra", [
+    {"having": [{"field": "total_order_value", "op": ">", "value": 1}]},
+    {"order_by": [{"field": "avg_order_value", "direction": "desc"}], "limit": 5},
+])
+def test_fanout_guard_covers_having_and_order_by(model, extra):
+    # order-level metrics used only to filter or sort line-level groups would be double counted
+    with pytest.raises(PlanError, match="double count"):
+        compile_plan(QueryPlan.model_validate({"metrics": ["revenue"], "dimensions": ["cust_nation.n_name"], **extra}),
+                     model)
+
+
+def test_having_metric_joins_its_tables(model, duck):
+    # profit needs PARTSUPP even though only HAVING mentions it
+    c, r = run_plan({"metrics": ["revenue"], "dimensions": ["part.p_mfgr"],
+                     "having": [{"field": "profit", "op": ">", "value": 0}]}, model, duck)
+    assert "PARTSUPP" in c.sql and r.row_count == 5
+
+
+@pytest.mark.parametrize("filt", [
+    {"field": "lineitem.l_quantity", "op": ">", "value": {"x": "1) OR (1=1"}},
+    {"field": "lineitem.l_quantity", "op": ">", "value": "1) OR (1=1"},
+    {"field": "lineitem.l_quantity", "op": "in", "value": [1, "2; DROP TABLE x"]},
+    {"field": "lineitem.l_quantity", "op": ">", "value": "nan"},
+    {"field": "orders.o_orderdate", "op": ">", "value": "1995-01-01' OR '1'='1"},
+    {"field": "orders.o_orderdate", "op": "=", "value": "FY95", "grain": "year"},
+])
+def test_plan_values_cannot_inject_sql(model, filt):
+    with pytest.raises(PlanError):
+        compile_plan(QueryPlan.model_validate({"metrics": ["revenue"], "filters": [filt]}), model)
+
+
+def test_having_value_cannot_inject_sql(model):
+    with pytest.raises(PlanError):
+        compile_plan(QueryPlan.model_validate({
+            "metrics": ["revenue"], "dimensions": ["cust_nation.n_name"],
+            "having": [{"field": "revenue", "op": ">", "value": "0 OR 1=1) UNION SELECT 1,2 --"}]}), model)
+
+
+def test_text_values_stay_quoted(model):
+    c = compile_plan(QueryPlan.model_validate({"metrics": ["customer_count"], "filters": [
+        {"field": "customer.c_name", "op": "=", "value": "x' OR '1'='1"}]}), model)
+    where = sqlglot.parse_one(c.sql, read="snowflake").args["where"].this
+    assert isinstance(where, sqlglot.exp.EQ) and where.expression.is_string
+    assert where.expression.this == "x' OR '1'='1"
+
+
+@pytest.mark.parametrize("value,grain", [("1995-03", "month"), ("1995-03-17", "month"), ("1995-Q1", "quarter"),
+                                         ("Q1 1995", "quarter"), ("1995-03-15", "week")])
+def test_period_filters_compare_period_starts(model, duck, value, grain):
+    c, r = run_plan({"metrics": ["order_count"],
+                     "filters": [{"field": "orders.o_orderdate", "op": "=", "value": value, "grain": grain}]},
+                    model, duck)
+    gold = duck.run(f"""SELECT COUNT(*) FROM DATAMIND_DB.TPCH.ORDERS o
+        WHERE DATE_TRUNC('{grain.upper()}', o.o_orderdate) = DATE_TRUNC('{grain.upper()}', DATE '{
+        {"1995-03": "1995-03-01", "1995-Q1": "1995-01-01", "Q1 1995": "1995-01-01"}.get(value, value)}')""")
+    assert r.rows[0][0] > 0 and results_match(r.rows, gold.rows)
+
+
+def test_year_filter_accepts_full_dates(model):
+    c = compile_plan(QueryPlan.model_validate({"metrics": ["revenue"], "filters": [
+        {"field": "orders.o_orderdate", "op": "=", "value": "1995-01-01", "grain": "year"}]}), model)
+    assert "= 1995" in c.sql
+
+
+@pytest.mark.parametrize("limit", [0, -5])
+def test_non_positive_limit_is_rejected(model, limit):
+    with pytest.raises(PlanError, match="limit"):
+        compile_plan(QueryPlan.model_validate({"metrics": ["revenue"], "limit": limit}), model)
 
 
 def test_distinct_count_is_fanout_safe(model, duck):

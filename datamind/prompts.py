@@ -121,7 +121,8 @@ Plan format:
 Rules:
 - Only metric names from VERIFIED METRICS and fields written as alias.column from TABLES.
 - Category values must be spelled exactly as listed. Text patterns use op "like" (e.g. "BRASS").
-- Dates: "between" with ISO dates ["1995-01-01", "1995-12-31"], or grain "year" with a 4-digit value.
+- Dates: "between" with ISO dates ["1995-01-01", "1995-12-31"], grain "year" with a 4-digit value, or
+  grain "month" / "quarter" with "1995-03" / "1995-Q1".
 - "Top N" / "which ... the most": order_by the metric and set limit. A single total: no dimensions.
 - Listing records without aggregation: dimensions only, no metrics.
 - If the question needs something this format cannot express (ratios between groups, ranks within groups,

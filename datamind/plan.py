@@ -6,6 +6,10 @@ metric definitions are never invented by the model.
 """
 from __future__ import annotations
 
+import datetime as dt
+import decimal
+import math
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -100,23 +104,60 @@ def _field_expr(ent: Entity, col: Column, grain: str | None) -> exp.Expression:
     return exp.DateTrunc(unit=exp.Literal.string(_TRUNC[grain]), this=c)
 
 
+def _number(value: Any) -> exp.Expression:
+    """A numeric literal from a model-supplied value; anything that is not a finite number is rejected,
+    so plan values can never smuggle SQL text into the compiled query."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, decimal.Decimal, str)):
+        raise PlanError(f"expected a number, got {value!r}")
+    try:
+        f = float(str(value).strip().replace(",", ""))
+    except ValueError:
+        raise PlanError(f"expected a number, got {value!r}") from None
+    if not math.isfinite(f):
+        raise PlanError(f"expected a finite number, got {value!r}")
+    return exp.Literal.number(int(f) if f.is_integer() and abs(f) < 1e15 else repr(f))
+
+
+_PERIOD = re.compile(r"^\s*(?:(\d{4})-(\d{1,2})(?:-(\d{1,2}))?|(\d{4})\s*-?\s*Q([1-4])|Q([1-4])\s*-?\s*(\d{4}))\s*$", re.I)
+
+
+def _date(value: Any, grain: str | None = None) -> dt.date:
+    """Parse an ISO date; for month/quarter/week grains also accept '1995-03', '1995-Q1' or 'Q1 1995'."""
+    s = str(value).strip()
+    m = _PERIOD.match(s)
+    try:
+        if m and m.group(1):
+            return dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3) or 1))
+        if m and (m.group(4) or m.group(7)):
+            year, q = (int(m.group(4)), int(m.group(5))) if m.group(4) else (int(m.group(7)), int(m.group(6)))
+            return dt.date(year, 3 * q - 2, 1)
+    except ValueError:
+        pass
+    raise PlanError(f"expected an ISO date (YYYY-MM-DD{', YYYY-MM or YYYY-Qn' if grain else ''}), got {value!r}")
+
+
 def _literal(col: Column, value: Any, grain: str | None, model: SemanticModel, notes: list[str]) -> exp.Expression:
     if value is None:
         return exp.Null()
+    if isinstance(value, (dict, list, tuple, set)):
+        raise PlanError(f"expected a single value for {col.name}, got {value!r}")
     if isinstance(value, bool):
         return exp.Boolean(this=value)
     if grain == "year":
-        return exp.Literal.number(int(str(value)[:4]))
-    if col.type == "date" and not grain:
-        return exp.Cast(this=exp.Literal.string(str(value)[:10]), to=exp.DataType.build("DATE"))
-    if col.type in ("number", "id") and not isinstance(value, str):
-        return exp.Literal.number(value)
-    if col.type in ("number", "id") and isinstance(value, str):
-        try:
-            float(value)
-            return exp.Literal.number(value)
-        except ValueError:
-            pass
+        m = re.fullmatch(r"\s*(\d{4})(?:\.0+|-\d{1,2}(?:-\d{1,2})?)?\s*", str(value))
+        if not m:
+            raise PlanError(f"expected a 4-digit year, got {value!r}")
+        return exp.Literal.number(int(m.group(1)))
+    if col.type == "date" and grain in _TRUNC:
+        # compare period starts on both sides, so the week-start setting can't shift the result
+        start = exp.Cast(this=exp.Literal.string(_date(value, grain).isoformat()), to=exp.DataType.build("DATE"))
+        return exp.DateTrunc(unit=exp.Literal.string(_TRUNC[grain]), this=start)
+    if col.type == "date":
+        return exp.Cast(this=exp.Literal.string(_date(value).isoformat()), to=exp.DataType.build("DATE"))
+    if col.type == "number":
+        return _number(value)
+    if col.type == "id" and not isinstance(value, str):
+        return _number(value)
     if col.type == "category":
         value, note = model.normalize_value(col, str(value))
         if note:
@@ -130,7 +171,7 @@ def _condition(f: FilterSpec, target: exp.Expression, col: Column | None, model:
 
     def lit(v: Any) -> exp.Expression:
         if col is None:  # metric (HAVING): numeric literal
-            return exp.Literal.number(v)
+            return _number(v)
         return _literal(col, v, f.grain, model, notes)
 
     if op == "is null":
@@ -166,17 +207,29 @@ def compile_plan(plan: QueryPlan, model: SemanticModel, dialect: str = "snowflak
         if asked.lower() != m.name.lower():
             notes.append(f"used metric '{m.name}' for '{asked}' ({m.description})")
 
+    if plan.limit is not None and plan.limit < 1:
+        raise PlanError(f"limit must be a positive integer, got {plan.limit}")
+
     dims = [(d, *model.resolve_field(d.field)) for d in plan.dimensions]
     filters = [(f, *model.resolve_field(f.field)) for f in plan.filters]
 
+    # metrics used only in HAVING or ORDER BY need the same join planning and double-counting check
+    extra: list = [model.metric(h.field) for h in plan.having]
+    for o in plan.order_by:
+        try:
+            extra.append(model.metric(o.field))
+        except SemanticError:
+            pass
+    all_metrics = metrics + [m for m in extra if m.name not in {x.name for x in metrics}]
+
     required: set[str] = set()
-    for m in metrics:
+    for m in all_metrics:
         required |= m.aliases | {m.grain.lower()}
     required |= {e.alias.lower() for _, e, _ in dims}
     required |= {e.alias.lower() for _, e, _ in filters}
 
     root = model.choose_root(required)
-    for m in metrics:
+    for m in all_metrics:
         if m.grain.lower() != root and not m.fanout_safe:
             raise PlanError(
                 f"metric '{m.name}' is defined per {m.grain} row, but the other requested fields need "
