@@ -1,4 +1,5 @@
 .env
+.env.bak
 *.p8
 *.pem
 keys/

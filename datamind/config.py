@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from .executors import DuckDBExecutor, SnowflakeExecutor
@@ -13,8 +14,18 @@ from .semantic import SemanticModel, load_model
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def parse_env_value(raw: str) -> str:
+    """Value of a KEY=VALUE line: quoted values are taken verbatim; unquoted ones end at ' #' (inline comment)."""
+    v = raw.strip()
+    if v[:1] in ("'", '"'):
+        end = v.find(v[0], 1)
+        if end != -1:
+            return v[1:end]
+    return re.split(r"\s+#", v, maxsplit=1)[0].strip()
+
+
 def load_dotenv(path: str | Path | None = None) -> None:
-    """Minimal .env loader (KEY=VALUE lines); existing environment variables win."""
+    """Minimal .env loader (KEY=VALUE lines, inline # comments allowed); existing environment variables win."""
     p = Path(path) if path else ROOT / ".env"
     if not p.exists():
         return
@@ -23,7 +34,7 @@ def load_dotenv(path: str | Path | None = None) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        os.environ.setdefault(k.strip(), parse_env_value(v))
 
 
 def _path(env: str, default: str) -> Path:
