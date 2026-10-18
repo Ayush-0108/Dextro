@@ -148,7 +148,7 @@ class DataMind:
              step: Callable[[str], None]) -> None:
         if is_write_request(question):
             ans.status = "refused"
-            ans.message = ("DataMind is read-only: it answers questions about the data but never changes it. "
+            ans.message = ("Nexora is read-only: it answers questions about the data but never changes it. "
                            "Its Snowflake role has SELECT privileges only.")
             return
 

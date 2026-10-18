@@ -1,4 +1,4 @@
-"""DataMind — Streamlit UI.  Run:  streamlit run app/streamlit_app.py"""
+"""Nexora (package: datamind) — Streamlit UI.  Run:  streamlit run app/streamlit_app.py"""
 from __future__ import annotations
 
 import json
@@ -16,7 +16,7 @@ from datamind.config import build, load_dotenv  # noqa: E402
 from datamind.pipeline import Answer  # noqa: E402
 
 load_dotenv()
-st.set_page_config(page_title="DataMind", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Nexora", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -33,7 +33,7 @@ st.markdown("""
 
 ROLES = {"Analyst (full access)": "DATAMIND_AGENT", "Restricted (PII masked)": "DATAMIND_RESTRICTED"}
 STATUS_LABEL = {"answered": "Answered", "empty": "No matching rows", "clarify": "Needs clarification",
-                "not_in_data": "Not in this data", "refused": "Declined", "chitchat": "About DataMind",
+                "not_in_data": "Not in this data", "refused": "Declined", "chitchat": "About Nexora",
                 "error": "Could not answer"}
 
 
@@ -194,7 +194,7 @@ def render_answer(a: Answer, idx: int, show_candidates: bool) -> None:
 try:
     agent = get_agent()
 except Exception as e:  # configuration problems are shown, not hidden
-    st.error(f"DataMind could not start: {e}")
+    st.error(f"Nexora could not start: {e}")
     st.info("Copy .env.example to .env, fill in your Snowflake account and GEMINI_API_KEY, "
             "run snowflake/01_setup.sql once, then reload. `python -m datamind check` diagnoses connectivity.")
     st.stop()
@@ -203,7 +203,8 @@ st.session_state.setdefault("turns", [])
 st.session_state.setdefault("pending", None)
 
 with st.sidebar:
-    st.markdown("## DataMind")
+    st.markdown("## Nexora")
+    st.caption("Verified AI data analyst · by Dextro")
     st.caption("Ask questions in plain English. Every answer is computed by SQL in Snowflake, cross-checked, "
                "and shown with the query and rows behind it.")
     st.markdown(f"**Dataset:** {agent.model.title}")
