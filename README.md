@@ -275,6 +275,18 @@ streamlit run app/streamlit_app.py
 python -m datamind ask "What was revenue by customer region in 1996?"
 ```
 
+### React UI (optional, alongside Streamlit)
+
+A React + TypeScript + Tailwind frontend (`web/`) talks to a small REST API (`api/server.py`) that calls the same
+pipeline; the Streamlit app is unchanged. Needs Node.js 20+.
+
+```bash
+cd web && npm ci && npm run build && cd ..
+uvicorn api.server:app --port 8000          # React UI + API on http://localhost:8000
+```
+
+For development, run `npm run dev` in `web/` (http://localhost:5173, forwarding `/api` to port 8000).
+
 ### Or run it with Docker
 
 After steps 4–6 (Snowflake set up, `.env` filled in, Ollama running with `gemma4:12b`):
@@ -283,7 +295,8 @@ After steps 4–6 (Snowflake set up, `.env` filled in, Ollama running with `gemm
 docker compose up --build
 ```
 
-Open http://localhost:8501. The container reads `.env` at run time (it is never copied into the image), reaches
+Open http://localhost:8501 (Streamlit) or http://localhost:8000 (React UI). The image builds the React app in a
+Node stage. The container reads `.env` at run time (it is never copied into the image), reaches
 Ollama on the host through `host.docker.internal`, and mounts `.cache/` so cached Gemma replies (for example from
 `python scripts/warm_demo.py`) are reused. On Linux, start Ollama with `OLLAMA_HOST=0.0.0.0` so the container can
 reach it.

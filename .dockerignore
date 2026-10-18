@@ -18,3 +18,5 @@ __pycache__/
 .claude/
 eval/reports/*.json
 .DS_Store
+web/node_modules/
+web/dist/
