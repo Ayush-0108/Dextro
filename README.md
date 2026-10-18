@@ -1,7 +1,451 @@
-# Dextro — DataMind
+# Nexora — Verified AI Data Analyst
 
-**Verified answers from your Snowflake data.** *Dextro* is our team and repository; *DataMind* is the product
-(the PS1 track name), used throughout the code and docs.
+**Verified answers from your Snowflake data.** Nexora is an AI-powered data analyst built by **Dextro** for the ZeroDay OSS Hacktoberfest 2026 PS1 "Talk to Your Data" track.
+
+Ask a question in plain English. Nexora answers it by running SQL in Snowflake, cross-checks the result with an independently generated query, explains what ran, and shows the SQL, result rows, and Snowflake query ID behind every answer. When it cannot be sure, it says so.
+
+> **Nexora — Ask your data. Verify every answer.**
+
+Built with **Snowflake Enterprise** and **Google Gemma**, with local Ollama inference for a reproducible setup without paid API requirements.
+
+[![Tests](https://img.shields.io/badge/tests-153%20passed-brightgreen.svg)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Snowflake](https://img.shields.io/badge/Snowflake-Enterprise-29B5E8.svg)](https://www.snowflake.com/)
+[![Model](https://img.shields.io/badge/Model-Google%20Gemma-4285F4.svg)](https://ai.google.dev/gemma)
+
+## Example
+
+```text
+You: Which 5 nations generated the most revenue from customers in ASIA in 1994?
+
+Nexora:
+  Answer: [answered · high confidence]
+
+  VIETNAM led with 15,472,321.71 ...
+
+  Evidence:
+  - Result rows supporting the answer
+  - SQL query and Snowflake query ID
+  - Explanation of how the result was computed
+  - Independent query cross-check
+```
+
+---
+
+## Features
+
+- **Natural-language analytics:** Ask questions about customers, orders, suppliers, revenue, profit, shipping, and more.
+- **Independent SQL verification:** Executes separate query paths and compares their results.
+- **Evidence-backed answers:** Displays executed SQL, query IDs, result tables, and computation explanations.
+- **Numerical grounding:** Checks numbers in generated answers against actual result rows and supported calculations.
+- **SQL safety:** Uses a read-only Snowflake role, SQL validation, row limits, query timeouts, and write-intent guards.
+- **Ambiguity handling:** Clarifies vague questions instead of silently guessing.
+- **Conversation follow-ups:** Supports questions such as "and in 1996?" using conversation context.
+- **Data governance:** Supports role-based access and masking of sensitive customer information.
+- **Interactive dashboard:** Provides evidence tabs, cell-level highlighting, and automatic charts.
+- **Extensible semantic models:** Supports additional datasets through YAML configuration rather than rewriting the application.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A[User Question] --> B[Write-Intent Guard]
+    B -->|Unsafe| C[Refuse Request]
+    B -->|Allowed| D[Gemma Router]
+    D --> E[Question Classification]
+    E -->|Ambiguous| F[Ask for Clarification]
+    E -->|Answerable| G[Generate Query Plan]
+    E --> H[Generate Independent SQL]
+    G --> I[Semantic Model Compiler]
+    I --> J[SQL Validator]
+    H --> J
+    J -->|Invalid SQL| K[Repair with Gemma]
+    K --> J
+    J -->|Validated| L[(Snowflake)]
+    L --> M[Compare Query Results]
+    M -->|Disagreement| N[Third Query and Majority Vote]
+    N --> M
+    M -->|Agreement| O[Generate SQL-Based Explanation]
+    O --> P[Gemma Narration]
+    P --> Q[Validate Answer Numbers]
+    Q -->|Unsupported Numbers| R[Retry or Template Fallback]
+    R --> S[Final Answer and Evidence]
+    Q -->|Verified| S
+```
+
+### How it works
+
+1. **Understand:** Gemma classifies the question and identifies ambiguity or unsafe intent.
+2. **Plan:** Gemma generates a structured JSON query plan and an independent SQL candidate.
+3. **Compile:** Deterministic Python code translates the plan into SQL using the configured semantic model.
+4. **Validate:** The SQL validator checks allowed statements, tables, columns, and query constraints.
+5. **Execute:** Snowflake executes the validated queries using a restricted read-only role.
+6. **Cross-check:** Nexora compares independent results and uses a third query and majority vote when needed.
+7. **Explain:** The application derives its computation explanation from the executed SQL syntax tree.
+8. **Ground:** Every numerical claim is checked against returned rows or supported derived calculations.
+9. **Present:** The dashboard displays the answer and supporting evidence.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for more details.
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| AI model | Google Gemma 4 |
+| Local inference | Ollama |
+| Data warehouse | Snowflake Enterprise |
+| Backend | Python |
+| SQL parsing and validation | sqlglot and custom validation logic |
+| Frontend | Streamlit |
+| Semantic configuration | YAML |
+| Offline evaluation | pytest and DuckDB |
+| Version control | Git and GitHub |
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11–3.13; Python 3.12 is tested.
+- A Snowflake account.
+- [Ollama](https://ollama.com/) for local inference, or a Google AI Studio API key.
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/ZERODAY-2026/Dextro.git
+cd Dextro
+```
+
+### 2. Create a virtual environment
+
+```bash
+python -m venv .venv
+```
+
+Activate it on Windows:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Activate it on Linux or macOS:
+
+```bash
+source .venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure Snowflake
+
+Open a Snowflake Snowsight SQL worksheet as `ACCOUNTADMIN` and run:
+
+[`snowflake/01_setup.sql`](snowflake/01_setup.sql)
+
+The setup creates the warehouse, database objects, roles, grants, masking policies, and other resources needed by the application.
+
+### 5. Configure environment variables
+
+Copy the example environment file:
+
+Windows:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Linux or macOS:
+
+```bash
+cp .env.example .env
+```
+
+Set your Snowflake credentials in `.env`:
+
+```dotenv
+SNOWFLAKE_ACCOUNT=your_account_identifier
+SNOWFLAKE_USER=your_username
+SNOWFLAKE_PASSWORD=your_password
+
+GEMMA_BACKEND=ollama
+GEMMA_MODEL=gemma4:12b
+```
+
+Use your own credentials and keep `.env` out of version control. For non-trial Snowflake accounts, follow the repository's key-pair authentication instructions where required.
+
+### 6. Start Ollama
+
+Install Ollama and download the configured model:
+
+```bash
+ollama pull gemma4:12b
+```
+
+Ensure the Ollama service is running before launching Nexora.
+
+Alternatively, configure the supported Gemini API backend using the relevant environment variables documented in `.env.example`.
+
+### 7. Check connectivity
+
+```bash
+python -m datamind check
+```
+
+This checks the Snowflake connection and Gemma inference.
+
+### 8. Launch Nexora
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+### 9. Ask a question from the CLI
+
+```bash
+python -m datamind ask "What was revenue by customer region in 1996?"
+```
+
+---
+
+## Configuration
+
+| Variable | Purpose |
+|---|---|
+| `SNOWFLAKE_*` | Snowflake connection settings |
+| `GEMMA_BACKEND` | Selects local Ollama or the supported API backend |
+| `GEMMA_MODEL` | Specifies the Gemma model |
+| `GEMMA_THINKING` | Enables additional model reasoning where supported |
+| `DATAMIND_DATASET` | Selects the semantic model YAML file |
+| `DATAMIND_ENGINE` | Selects Snowflake or the offline DuckDB engine |
+| `DATAMIND_MAX_ROWS` | Sets the maximum number of rows returned per query |
+
+Existing `DATAMIND_*` identifiers are retained for compatibility with the current codebase.
+
+## Using Nexora
+
+### Ask questions in natural language
+
+Examples:
+
+- Which customers generated the highest revenue?
+- What was the revenue by region in 1996?
+- Which suppliers have the longest shipping delays?
+- Compare sales across customer regions.
+- What were the top five nations by revenue in Asia?
+
+The supported questions depend on the configured semantic model and available tables.
+
+### Inspect the evidence
+
+Each answer can include:
+
+- The returned result table.
+- Highlighted cells supporting numerical claims.
+- The executed SQL.
+- The Snowflake query ID and answer ID.
+- A plain-English explanation of the computation.
+- The independent query comparison.
+- Downloadable JSON evidence.
+
+### Test changing data
+
+Run [`snowflake/02_demo_data_change.sql`](snowflake/02_demo_data_change.sql) in Snowsight to demonstrate how a data change affects a subsequent answer.
+
+### Trace query execution
+
+Use [`snowflake/03_evidence_queries.sql`](snowflake/03_evidence_queries.sql) to inspect query history and warehouse usage.
+
+---
+
+## Snowflake Integration
+
+Snowflake acts as the system of record and query execution engine.
+
+Nexora uses:
+
+- A dedicated warehouse for query execution.
+- Least-privilege roles and read-only access.
+- Disabled secondary roles for restricted execution sessions.
+- Dynamic data masking for sensitive information.
+- Query tags for execution traceability.
+- Query timeouts and result row limits.
+- Warehouse auto-suspend and resource monitoring.
+- Time Travel for before-and-after data demonstrations.
+
+Model inference is handled separately by Gemma. Snowflake stores and executes the data queries.
+
+## Gemma Integration
+
+Gemma supports the main language tasks:
+
+- Question classification and rewriting.
+- Structured query-plan generation.
+- SQL generation and repair.
+- Final answer narration.
+
+The application validates model outputs before using them. Structured plans are schema-checked, SQL passes through validation and Snowflake execution, and generated numerical claims are checked against the results.
+
+Local Ollama inference provides an option for running the model without a paid inference API. API availability, model requirements, and resource usage depend on the selected configuration.
+
+---
+
+## Evaluation and Testing
+
+### Current verified results
+
+The following results were recorded on October 18, 2026. They represent the checks completed so far, not a claim of perfect end-to-end AI accuracy.
+
+| Evaluation | Result | Interpretation |
+|---|---:|---|
+| Offline automated tests | 153/153 passed | Validates the tested components and scenarios |
+| Gold-query comparison | 52/52 matched | Expected answers matched between Snowflake and independent DuckDB SF1 |
+| Chinook harness | 22/22 passed | Validates the scripted harness and its gold-query workflow |
+| Live Snowflake + Ollama smoke test | 1 question | One correct, high-confidence response; not a comprehensive accuracy evaluation |
+
+**Important:** End-to-end accuracy across the evaluation set has not yet been measured. Gold-query equivalence validates the expected answers, but does not by itself establish Nexora's model accuracy.
+
+### Run tests
+
+Install development dependencies:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Run the offline test suite:
+
+```bash
+python -m pytest -q
+```
+
+Generate local TPC-H test data if needed:
+
+```bash
+python scripts/make_local_tpch.py --scale 0.01
+```
+
+### Run gold-query verification
+
+```bash
+DATAMIND_DUCKDB_DATA=data/tpch_sf1 python -m datamind check-gold --independent duckdb
+```
+
+### Run the evaluation harness
+
+```bash
+python -m datamind eval --paraphrases
+```
+
+Evaluation reports are written under `eval/reports/`.
+
+See [`eval/tpch_dev.yaml`](eval/tpch_dev.yaml) for the development questions and [`eval/HOLDOUT_TEMPLATE.yaml`](eval/HOLDOUT_TEMPLATE.yaml) for the holdout template.
+
+---
+
+## Adding Another Dataset
+
+Nexora uses YAML semantic models to describe tables, relationships, and metrics.
+
+Generate a draft model from a Snowflake schema:
+
+```bash
+python -m datamind draft-model --schema MY_SCHEMA --name mydata --out config/datasets/mydata.yaml
+```
+
+Review the generated descriptions, joins, and metrics before using the model.
+
+Launch the app with the new dataset:
+
+```bash
+DATAMIND_DATASET=config/datasets/mydata.yaml streamlit run app/streamlit_app.py
+```
+
+See [docs/ADDING_A_DATASET.md](docs/ADDING_A_DATASET.md) for details.
+
+---
+
+## Known Limitations
+
+- Comprehensive end-to-end model accuracy has not yet been measured.
+- Agreement between two query paths increases confidence but does not guarantee correctness if both paths share the same error.
+- Some complex ratios, rankings, and comparisons may depend on the independent SQL-generation path when the structured plan cannot express the question.
+- The numerical checker supports selected derived values; a coincidentally matching derived number is not necessarily proof that the reasoning is correct.
+- Free API tiers may impose request limits, and questions can require multiple model calls.
+- Only one semantic model is active per application instance; questions spanning multiple configured datasets are out of scope.
+
+---
+
+## Main Technical Contribution
+
+Nexora adds a verification layer to natural-language-to-SQL analytics.
+
+Its core contribution combines:
+
+1. A semantic-model-driven SQL compiler.
+2. Guards against unsafe queries and certain join-related double counting.
+3. Independent SQL execution paths with result comparison.
+4. Explanations derived from the executed SQL syntax tree.
+5. Numerical grounding against actual result rows.
+6. Evaluation against independently computed gold-query results.
+
+The goal is to make AI-driven data analysis more transparent, auditable, and reliable without relying solely on a larger language model.
+
+## Repository Structure
+
+```text
+app/
+  streamlit_app.py          Streamlit UI and evidence panel
+
+config/
+  datasets/                 YAML semantic models
+
+datamind/
+  Pipeline, compiler, validator, checks, model clients,
+  executors, evaluation, discovery, and CLI
+
+eval/
+  Evaluation datasets and generated reports
+
+snowflake/
+  Setup, data-change demonstration, evidence queries, teardown
+
+scripts/
+  Local TPC-H generation and supporting utilities
+
+tests/
+  Automated offline test suite
+
+docs/
+  Architecture, demo instructions, dataset setup, and submission checklist
+```
+
+## Data and Licences
+
+- **TPC-H:** Sample benchmark data is copied into your own Snowflake account. No benchmark data is committed to this repository.
+- **Chinook:** The sample music-store database is sourced from the [Chinook database repository](https://github.com/lerocha/chinook-database), under its stated licence.
+- **Local test data:** Generated locally and excluded from version control.
+- **Gemma:** Review Google's applicable model licence and API terms before use. For sensitive data, prefer an appropriately configured local inference setup.
+- **Project code:** MIT License; see [`LICENSE`](LICENSE).
+
+## Contributing
+
+Contributions, bug reports, documentation improvements, and new semantic models are welcome.
+
+Please review:
+
+- [Contributing guidelines](CONTRIBUTING.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Security policy](SECURITY.md)
+
+---
+
+**Nexora — Ask your data. Verify every answer.**
 
 [![tests](https://github.com/ZERODAY-2026/Dextro/actions/workflows/tests.yml/badge.svg)](https://github.com/ZERODAY-2026/Dextro/actions/workflows/tests.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Tests: 153 passed](https://img.shields.io/badge/tests-153%20passed-brightgreen.svg)]() [![Snowflake: Enterprise](https://img.shields.io/badge/Snowflake-Enterprise_Live-29B5E8.svg)](https://www.snowflake.com/) [![Model: Google Gemma](https://img.shields.io/badge/Model-Google_Gemma_Local_&_API-4285F4.svg)](https://ai.google.dev/gemma)
 
