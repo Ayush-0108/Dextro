@@ -168,3 +168,13 @@ def test_period_breakdown_must_be_sorted(model):
     unsorted = "SELECT YEAR(o.o_orderdate) AS y, AVG(x) FROM t GROUP BY 1"
     assert any("not sorted" in i for i in check_candidate(c, unsorted, rows(7)))
     assert check_candidate(c, unsorted + " ORDER BY 1", rows(7)) == []
+
+
+def test_how_much_more_cannot_be_negative(model):
+    from decimal import Decimal
+    c = question_constraints("How much more revenue would there have been in 1994 without those discounts?", model)
+    neg = QueryResult(sql="", columns=["x"], rows=[(Decimal("-123141078.23"),)])
+    pos = QueryResult(sql="", columns=["x"], rows=[(Decimal("123141078.23"),)])
+    assert any("negative" in i for i in check_candidate(c, "SELECT 1 /* 1994 */", neg))
+    assert check_candidate(c, "SELECT 1 /* 1994 */", pos) == []
+    assert not question_constraints("How much revenue was there in 1994?", model).non_negative

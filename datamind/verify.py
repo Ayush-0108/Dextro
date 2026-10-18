@@ -11,6 +11,7 @@ They are deliberately conservative: a check fires only on explicit years, number
 """
 from __future__ import annotations
 
+import decimal
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -37,6 +38,8 @@ _SINGULAR_SUBJECT = re.compile(r"\b(?:which|what)\s+((?:[a-z]+\s+){0,2}?[a-z]+)\
                                r"supplied|generated|made|sold|bought|shipped|received|earned|spent|ordered|"
                                r"contributed|brought)\b|^\s*who\s+(?:had|has|was|is|placed|supplied|generated|made|"
                                r"sold|bought|shipped|received|earned|spent|ordered)\b", re.I)
+# "how much more revenue would there have been", "how many fewer orders": an amount of difference, never negative
+_AMOUNT_OF_CHANGE = re.compile(r"\bhow\s+(?:much|many)\s+(?:more|less|fewer|extra|additional)\b", re.I)
 _PERIOD_BREAKDOWN = re.compile(r"\b(?:each|every|per|by)\s+(?:[a-z]+\s+)?(quarter|month|week|year)\b"
                                r"|\b(quarterly|monthly|weekly|yearly|annually)\b", re.I)
 _TIME_UNIT = re.compile(r"^\s*(?:day|week|month|quarter|year|hour|minute)s?\b", re.I)
@@ -53,6 +56,7 @@ class Constraints:
     top_n: int | None = None
     single_value: bool = False
     period_breakdown: str | None = None   # "quarter", "month", ...: the answer needs more than one row
+    non_negative: bool = False              # "how much more/less ...": a difference amount can't be negative
 
 
 def _value_terms(model: SemanticModel) -> dict[str, str]:
@@ -87,6 +91,7 @@ def question_constraints(question: str, model: SemanticModel) -> Constraints:
         noun = (subj.group(1) or "").split()[-1].lower() if subj and subj.group(1) else ("who" if subj else "")
         if subj and not (noun.endswith("s") and not noun.endswith("ss")):
             cons.top_n = 1          # "which nation ... the most" asks for one nation, not a ranking
+    cons.non_negative = bool(_AMOUNT_OF_CHANGE.search(q))
     pb = _PERIOD_BREAKDOWN.search(q)
     if pb:
         word = (pb.group(1) or pb.group(2)).lower()
@@ -162,6 +167,10 @@ def check_candidate(cons: Constraints, sql: str, result: QueryResult | None) -> 
             issues.append(f"the question asks for a single number but the query returned {n} rows")
         if cons.period_breakdown and n == 1:
             issues.append(f"the question asks for a breakdown by {cons.period_breakdown} but the query returned 1 row")
+        if cons.non_negative and any(isinstance(v, (int, float, decimal.Decimal)) and not isinstance(v, bool) and v < 0
+                                     for r in result.rows for v in r):
+            issues.append("the question asks how much more or less, but the query returned a negative amount "
+                          "(the difference is the wrong way round)")
         if cons.period_breakdown and n > 1 and not _sorted(sql):
             issues.append(f"the question asks for a breakdown by {cons.period_breakdown} but the rows are not sorted "
                           f"(add ORDER BY the {cons.period_breakdown})")
