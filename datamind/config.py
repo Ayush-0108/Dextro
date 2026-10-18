@@ -47,7 +47,9 @@ def dataset_path() -> Path:
 
 
 def build_model() -> SemanticModel:
-    return load_model(dataset_path(), database=os.getenv("SNOWFLAKE_DATABASE"), schema=os.getenv("SNOWFLAKE_SCHEMA"))
+    # the dataset YAML names its own database and schema, so switching datasets is one setting (DATAMIND_DATASET);
+    # SNOWFLAKE_DATABASE / SNOWFLAKE_SCHEMA in .env must not silently point a dataset at another dataset's tables
+    return load_model(dataset_path())
 
 
 def build_executor(model: SemanticModel, engine: str | None = None):

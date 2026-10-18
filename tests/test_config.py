@@ -91,3 +91,13 @@ def test_script_runs_standalone(tmp_path):
     r = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert "SNOWFLAKE_PASSWORD" in r.stdout
+
+
+def test_dataset_yaml_decides_its_schema(monkeypatch):
+    # .env sets SNOWFLAKE_SCHEMA=TPCH; switching to Chinook must still query DATAMIND_DB.CHINOOK
+    from datamind.config import build_model
+    monkeypatch.setenv("SNOWFLAKE_SCHEMA", "TPCH")
+    monkeypatch.setenv("DATAMIND_DATASET", "config/datasets/chinook.yaml")
+    assert build_model().schema_name == "CHINOOK"
+    monkeypatch.setenv("DATAMIND_DATASET", "config/datasets/tpch.yaml")
+    assert build_model().schema_name == "TPCH"

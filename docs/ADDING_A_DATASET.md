@@ -62,5 +62,5 @@ python -m datamind check-gold --file eval/chinook_dev.yaml --independent duckdb
 ### 7. Run the application on the new dataset
 Launch the Streamlit app targeting Chinook:
 ```bash
-DATAMIND_DATASET=config/datasets/chinook.yaml SNOWFLAKE_SCHEMA=CHINOOK streamlit run app/streamlit_app.py
+DATAMIND_DATASET=config/datasets/chinook.yaml streamlit run app/streamlit_app.py
 ```
