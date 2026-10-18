@@ -17,6 +17,13 @@ _Last updated: 2026-10-18 (end of session 2). Team repo: https://github.com/ZERO
 - **Repo hygiene:** no `.env`, keys, `CLAUDE.local.md`, `private/` or data in git; account identifier and login
   name absent from the whole history (checked before pushing).
 
+## Verified live — Chinook (2026-10-18)
+- `snowflake/10_chinook_setup.sql` (45 statements, run via the connector with the owner's login) and
+  `scripts/load_chinook.py`: 11 tables, row counts equal to the source (ARTIST 275, ALBUM 347, EMPLOYEE 8,
+  CUSTOMER 59, GENRE 25, MEDIA_TYPE 5, TRACK 3503, INVOICE 412, INVOICE_LINE 2240, PLAYLIST 18, PLAYLIST_TRACK 8715).
+- Agent role reads; restricted role sees email/phone masked; agent DELETE blocked (insufficient privileges).
+- `check-gold --independent duckdb` on eval/chinook_dev.yaml: all 16 gold queries match.
+
 ## Not verified / Pending
 - `snowflake/10_chinook_setup.sql` needs to be run in Snowsight as `ACCOUNTADMIN`, followed by `scripts/load_chinook.py`.
 - Full eval baseline across all 52 dev queries and Chinook dev queries (local Ollama takes ~218s/question; 31B via Hugging Face is the faster option — Google AI Studio is ruled out by the jury).

@@ -388,6 +388,7 @@ The following results were recorded on October 18, 2026. They represent the chec
 | Offline automated tests | 185/185 passed | Validates the tested components and scenarios |
 | Gold-query comparison | 52/52 matched | Expected answers matched between Snowflake and independent DuckDB SF1 |
 | Coverage-check false alarms | 0 of 142 | No correct gold answer (TPC-H + Chinook, with paraphrases) is flagged by the coverage and shape checks |
+| Chinook live in Snowflake | 11 tables, 15,607 rows; 16/16 gold matched | Loaded with stage + `COPY INTO`; every Chinook gold query matches between Snowflake and independent DuckDB; masking and read-only grants verified |
 | Chinook harness | 22/22 passed | Validates the scripted harness and its gold-query workflow |
 | Live Snowflake + Ollama smoke test | 1 question | One correct, high-confidence response; not a comprehensive accuracy evaluation |
 
