@@ -1,8 +1,3 @@
-# Dextro — DataMind
-
-**Verified answers from your Snowflake data.** *Dextro* is our team and repository; *DataMind* is the product
-(the PS1 track name), used throughout the code and docs.
-
 # Nexora — Verified AI Data Analyst
 
 **Verified answers from your Snowflake data.** Nexora is an AI-powered data analyst built by **Dextro** for the ZeroDay OSS Hacktoberfest 2026 PS1 "Talk to Your Data" track.
