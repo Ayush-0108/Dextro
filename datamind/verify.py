@@ -13,6 +13,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
+
+import sqlglot
+from sqlglot import exp
 
 from .executors import QueryResult
 from .numbers import parse_numbers
@@ -134,3 +138,56 @@ def check_candidate(cons: Constraints, sql: str, result: QueryResult | None) -> 
         if cons.period_breakdown and n == 1:
             issues.append(f"the question asks for a breakdown by {cons.period_breakdown} but the query returned 1 row")
     return issues
+
+
+_CLAUSES = ((exp.Where, "WHERE"), (exp.Having, "HAVING"), (exp.Qualify, "QUALIFY"), (exp.Group, "GROUP BY"),
+            (exp.Limit, "LIMIT"), (exp.Order, "ORDER BY"))
+
+
+def _clauses(sql: str) -> list[tuple[str, str]]:
+    """(clause, lower-case text) for every filtering/grouping clause in the query, then the whole query."""
+    out: list[tuple[str, str]] = []
+    try:
+        tree = sqlglot.parse_one(sql, read="snowflake")
+        for node_type, name in _CLAUSES:
+            out += [(name, n.sql(dialect="snowflake").lower()) for n in tree.find_all(node_type)]
+    except sqlglot.errors.ParseError:
+        pass
+    return out + [("the query", sql.lower())]
+
+
+def coverage_report(cons: Constraints, sql: str, result: QueryResult | None) -> list[dict[str, Any]]:
+    """What the question asked for, and where the executed query does it: the answer's 'question -> query' check.
+
+    Each item: {"asked": "year 1995", "found": True, "where": "WHERE"}. Computed by code from the executed SQL and
+    result, never by the model, so a reader can see that the query answers the question that was asked.
+    """
+    clauses = _clauses(sql)
+    items: list[dict[str, Any]] = []
+
+    def where(match) -> str:
+        return next((name for name, text in clauses if match(text)), "")
+
+    for y in sorted(cons.years):
+        w = where(lambda t, y=y: str(y) in t)
+        items.append({"asked": f"year {y}", "found": bool(w), "where": w})
+    for text, canon in cons.values.items():
+        w = where(lambda t, a=canon.lower(), b=text.lower(): a in t or b in t)
+        asked = canon if text.lower() == canon.lower() else f"{text} ({canon})"
+        items.append({"asked": asked, "found": bool(w), "where": w})
+    for raw, value, is_pct in cons.numbers:
+        w = where(lambda t, v=value, p=is_pct: _number_used(v, p, _sql_numbers(t)))
+        items.append({"asked": raw, "found": bool(w), "where": w})
+    n = result.row_count if result is not None and result.ok else None
+    rows = "" if n is None else f"{n} row{'s' if n != 1 else ''}"
+    if cons.top_n is not None:
+        lim = next((t for name, t in clauses if name == "LIMIT"), "")
+        items.append({"asked": f"top {cons.top_n}", "found": n is not None and n <= cons.top_n,
+                      "where": f"{lim.upper()}, {rows}" if lim else rows})
+    if cons.single_value:
+        items.append({"asked": "a single number", "found": n == 1, "where": rows})
+    if cons.period_breakdown:
+        grouped = any(name == "GROUP BY" for name, _ in clauses)
+        items.append({"asked": f"one row per {cons.period_breakdown}", "found": n is not None and n > 1,
+                      "where": ("GROUP BY, " if grouped else "") + rows})
+    return items

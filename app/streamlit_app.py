@@ -108,6 +108,16 @@ def render_answer(a: Answer, idx: int, show_candidates: bool) -> None:
         chips.append(chip("templated answer", "neutral"))
     st.markdown(" ".join(chips), unsafe_allow_html=True)
     st.markdown(highlighted(a) if a.number_checks else esc(a.message))
+    if a.standalone_question and a.standalone_question.strip().lower() != a.question.strip().lower():
+        st.caption(f"Interpreted as: {esc(a.standalone_question)}")
+    if a.coverage:
+        # the question -> query check: what was asked, and where the executed SQL does it (computed by code)
+        parts = [f"{'✅' if i['found'] else '❌'} {esc(i['asked'])}" + (f" *({esc(i['where'])})*" if i["where"] else "")
+                 for i in a.coverage]
+        st.markdown("**Your question → the query:** " + " · ".join(parts))
+        st.caption("Checked by code against the SQL that ran in Snowflake, not by the AI."
+                   + ("" if all(i["found"] for i in a.coverage) else " ❌ = the query doesn't do this part of the question,"
+                      " so the answer is not marked high confidence."))
     if a.assumptions:
         st.caption("Assumptions: " + " · ".join(esc(x) for x in a.assumptions))
     if a.status == "clarify" and a.interpretations:
@@ -230,8 +240,10 @@ if question:
     with st.chat_message("user"):
         st.markdown(esc(question))
     with st.chat_message("assistant"):
-        with st.spinner("Routing, generating two independent queries, running them in Snowflake, cross-checking..."):
+        with st.status("Understanding your question", expanded=False) as progress:
             history = [t.history_entry() for t in st.session_state.turns if t.status in ("answered", "empty")]
-            ans = agent.ask(question, history=history, role=role)
+            ans = agent.ask(question, history=history, role=role,
+                            on_step=lambda label: (progress.update(label=label), progress.write(label)))
+            progress.update(label=f"Done in {ans.timings.get('total_s', 0):.0f} s", state="complete")
         st.session_state.turns.append(ans)
         render_answer(ans, len(st.session_state.turns) - 1, show_candidates)

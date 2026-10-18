@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from datamind.executors import QueryResult
-from datamind.verify import check_candidate, question_constraints
+from datamind.verify import check_candidate, coverage_report, question_constraints
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -114,3 +114,31 @@ def test_period_breakdown_needs_more_than_one_row(model):
     assert check_candidate(c, "SELECT 1 /* 1996 */", rows(4)) == []
     assert question_constraints("Show monthly order counts for 1997", model).period_breakdown == "month"
     assert question_constraints("How many orders were placed in 1997?", model).period_breakdown is None
+
+
+def test_coverage_report_shows_where_each_part_is_used(model):
+    c = question_constraints("Top 5 customers in ASIA by revenue in 1995 with more than 38 orders", model)
+    sql = ("SELECT c.c_name, SUM(x) AS revenue FROM t WHERE r.r_name = 'ASIA' AND YEAR(o.o_orderdate) = 1995 "
+           "GROUP BY c.c_name HAVING COUNT(*) > 38 ORDER BY revenue DESC LIMIT 5")
+    rep = {i["asked"]: i for i in coverage_report(c, sql, rows(5))}
+    assert rep["year 1995"] == {"asked": "year 1995", "found": True, "where": "WHERE"}
+    assert rep["ASIA"]["where"] == "WHERE" and rep["38"]["where"] == "HAVING"
+    assert rep["top 5"]["found"] and rep["top 5"]["where"].startswith("LIMIT 5")
+    missing = {i["asked"]: i for i in coverage_report(c, "SELECT 1 LIMIT 5", rows(5))}
+    assert not missing["year 1995"]["found"] and not missing["ASIA"]["found"]
+
+
+@pytest.mark.parametrize("dataset,eval_file,data_fixture", [
+    ("config/datasets/tpch.yaml", "eval/tpch_dev.yaml", "duck"),
+])
+def test_coverage_report_agrees_with_the_checks_on_gold(request, dataset, eval_file, data_fixture):
+    # every gold answer passes the checks, so every item of its checklist must be a tick
+    from datamind.semantic import load_model
+    m = load_model(ROOT / dataset)
+    ex = request.getfixturevalue(data_fixture)
+    for it in yaml.safe_load((ROOT / eval_file).read_text())["items"]:
+        if it.get("gold_sql"):
+            res = ex.run(it["gold_sql"])
+            for q in [it["question"], *it.get("paraphrases", [])]:
+                rep = coverage_report(question_constraints(q, m), it["gold_sql"], res)
+                assert all(i["found"] for i in rep), (it["id"], q, rep)

@@ -20,7 +20,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Any, Callable, Literal, Sequence
 
 import sqlglot
 from pydantic import ValidationError
@@ -36,7 +36,7 @@ from .prompts import narrate_prompt, plan_prompt, repair_prompt, router_prompt, 
 from .retrieval import ExampleStore
 from .semantic import SemanticError, SemanticModel
 from .sqlcheck import extract_sql, is_write_request, validate_sql
-from .verify import check_candidate, question_constraints
+from .verify import check_candidate, coverage_report, question_constraints
 
 Status = Literal["answered", "empty", "clarify", "not_in_data", "refused", "chitchat", "error"]
 _PREFERENCE = {"plan": 0, "sql": 1, "sql_alt": 2}
@@ -82,6 +82,7 @@ class Answer:
     explanation: list[str] = field(default_factory=list)
     number_checks: list[NumberCheck] = field(default_factory=list)
     checks: list[str] = field(default_factory=list)   # coverage/shape problems of the chosen query, if any
+    coverage: list[dict[str, Any]] = field(default_factory=list)   # question -> query checklist (verify.py)
     narration: str = "gemma"          # gemma | fallback
     timings: dict[str, float] = field(default_factory=dict)
     model_name: str = ""
@@ -104,7 +105,7 @@ class Answer:
             "chosen": self.chosen.name if self.chosen else None,
             "candidates": [c.to_json() for c in self.candidates], "alternatives": self.alternatives,
             "explanation": self.explanation, "number_checks": [dataclasses.asdict(n) for n in self.number_checks],
-            "checks": self.checks,
+            "checks": self.checks, "coverage": self.coverage,
             "narration": self.narration, "timings": self.timings, "model": self.model_name, "engine": self.engine,
             "role": self.role,
         }
@@ -126,7 +127,8 @@ class DataMind:
 
     # ------------------------------------------------------------------ public
     def ask(self, question: str, history: Sequence[dict[str, Any]] = (), role: str | None = None,
-            exclude_example_ids: Sequence[str] = ()) -> Answer:
+            exclude_example_ids: Sequence[str] = (), on_step: Callable[[str], None] | None = None) -> Answer:
+        """Answer one question. `on_step` (optional) receives a short label as each stage starts, for progress UIs."""
         t0 = time.time()
         aid = uuid.uuid4().hex[:10]
         # the role travels with every query (the executor may be shared by several app sessions)
@@ -134,7 +136,7 @@ class DataMind:
                      model_name=self.llm.name, engine=getattr(self.executor, "engine", ""),
                      role=role.upper() if role else getattr(self.executor, "role", None))
         try:
-            self._ask(ans, question, list(history), set(exclude_example_ids))
+            self._ask(ans, question, list(history), set(exclude_example_ids), on_step or (lambda _: None))
         except Exception as e:  # never crash the UI; report honestly
             ans.status, ans.message = "error", f"Something went wrong while answering: {type(e).__name__}: {e}"
         ans.timings["total_s"] = round(time.time() - t0, 2)
@@ -142,7 +144,8 @@ class DataMind:
         return ans
 
     # ------------------------------------------------------------------ steps
-    def _ask(self, ans: Answer, question: str, history: list[dict[str, Any]], exclude: set[str]) -> None:
+    def _ask(self, ans: Answer, question: str, history: list[dict[str, Any]], exclude: set[str],
+             step: Callable[[str], None]) -> None:
         if is_write_request(question):
             ans.status = "refused"
             ans.message = ("DataMind is read-only: it answers questions about the data but never changes it. "
@@ -150,6 +153,7 @@ class DataMind:
             return
 
         t = time.time()
+        step("Understanding your question")
         route = self._route(question, history)
         ans.timings["route_s"] = round(time.time() - t, 2)
         cat = route.get("category", "answerable")
@@ -184,6 +188,7 @@ class DataMind:
         previous_sql = next((h.get("sql") for h in reversed(history) if h.get("sql")), None)
 
         t = time.time()
+        step("Writing two independent queries (semantic plan + Gemma SQL)")
         jobs = [lambda: self._plan_candidate(q, ans.assumptions),
                 lambda: self._sql_candidate(q, ans.assumptions, examples, previous_sql)]
         if self.parallel:
@@ -194,9 +199,11 @@ class DataMind:
         ans.timings["generate_s"] = round(time.time() - t, 2)
 
         t = time.time()
+        step("Validating and running the queries in Snowflake")
         for c in cands:
             self._validate_and_run(c, q, ans.answer_id, ans.role)
         ans.candidates = cands
+        step("Cross-checking the results against each other and the question")
         self._reconcile(ans, q, examples, previous_sql)
         ans.timings["execute_s"] = round(time.time() - t, 2)
         if not ans.chosen:
@@ -228,6 +235,7 @@ class DataMind:
             ans.narration = "masked"
             return
         t = time.time()
+        step("Writing the answer and checking every number against the rows")
         self._narrate(ans, q, res)
         ans.timings["narrate_s"] = round(time.time() - t, 2)
         if masked:
@@ -359,6 +367,7 @@ class DataMind:
         best = groups[0]
         ans.chosen = min(best, key=rank)
         ans.checks = list(ans.chosen.issues)
+        ans.coverage = coverage_report(cons, ans.chosen.sql or "", ans.chosen.result)
         n_ok, n_best = len(ok), len(best)
         if n_best >= 2 and len(groups) == 1:
             ans.confidence = "high"

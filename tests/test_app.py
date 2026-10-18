@@ -34,6 +34,8 @@ def test_app_answers_with_evidence(app):
     assert len(app.tabs) >= 4                      # result / explanation / SQL & evidence / cross-check
     assert any("SELECT" in c.value for c in app.code)
     assert app.dataframe                            # result rows rendered
+    # the question -> query checklist: the year asked for is used in the SQL's WHERE clause
+    assert "Your question → the query" in text and "year 1996" in text and "WHERE" in text
 
 
 def test_app_clarifies_ambiguous_questions(app):
