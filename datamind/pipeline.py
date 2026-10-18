@@ -36,6 +36,7 @@ from .prompts import narrate_prompt, plan_prompt, repair_prompt, router_prompt, 
 from .retrieval import ExampleStore
 from .semantic import SemanticError, SemanticModel
 from .sqlcheck import extract_sql, is_write_request, validate_sql
+from .verify import check_candidate, question_constraints
 
 Status = Literal["answered", "empty", "clarify", "not_in_data", "refused", "chitchat", "error"]
 _PREFERENCE = {"plan": 0, "sql": 1, "sql_alt": 2}
@@ -50,6 +51,7 @@ class Candidate:
     error: str | None = None
     attempts: list[dict[str, Any]] = field(default_factory=list)
     result: QueryResult | None = None
+    issues: list[str] = field(default_factory=list)   # failed coverage/shape checks (datamind/verify.py)
 
     @property
     def ok(self) -> bool:
@@ -60,7 +62,7 @@ class Candidate:
         if r:
             r["rows"] = r["rows"][:max_rows]
         return {"name": self.name, "sql": self.sql, "plan": self.plan, "notes": self.notes, "error": self.error,
-                "attempts": self.attempts, "result": r}
+                "attempts": self.attempts, "issues": self.issues, "result": r}
 
 
 @dataclass
@@ -79,6 +81,7 @@ class Answer:
     alternatives: list[dict[str, Any]] = field(default_factory=list)
     explanation: list[str] = field(default_factory=list)
     number_checks: list[NumberCheck] = field(default_factory=list)
+    checks: list[str] = field(default_factory=list)   # coverage/shape problems of the chosen query, if any
     narration: str = "gemma"          # gemma | fallback
     timings: dict[str, float] = field(default_factory=dict)
     model_name: str = ""
@@ -101,6 +104,7 @@ class Answer:
             "chosen": self.chosen.name if self.chosen else None,
             "candidates": [c.to_json() for c in self.candidates], "alternatives": self.alternatives,
             "explanation": self.explanation, "number_checks": [dataclasses.asdict(n) for n in self.number_checks],
+            "checks": self.checks,
             "narration": self.narration, "timings": self.timings, "model": self.model_name, "engine": self.engine,
             "role": self.role,
         }
@@ -262,9 +266,9 @@ class DataMind:
         return c
 
     def _sql_candidate(self, q: str, assumptions: list[str], examples: list[dict[str, Any]],
-                       previous_sql: str | None, alt: bool = False) -> Candidate:
+                       previous_sql: str | None, alt: bool = False, feedback: Sequence[str] = ()) -> Candidate:
         c = Candidate(name="sql_alt" if alt else "sql")
-        system, prompt = sql_prompt(self.model, q, assumptions, examples, previous_sql, alt=alt)
+        system, prompt = sql_prompt(self.model, q, assumptions, examples, previous_sql, alt=alt, feedback=feedback)
         try:
             raw = self.llm.complete(prompt, system=system, thinking=self.thinking,
                                     temperature=0.4 if alt else 0.0, sample=1 if alt else 0)
@@ -314,12 +318,24 @@ class DataMind:
         return groups
 
     def _reconcile(self, ans: Answer, q: str, examples: list[dict[str, Any]], previous_sql: str | None) -> None:
-        ok = [c for c in ans.candidates if c.ok]
-        if len(ok) <= 1 or len(self._group(ok)) > 1:
-            alt = self._sql_candidate(q, ans.assumptions, examples, previous_sql, alt=True)
+        cons = question_constraints(q, self.model)
+
+        def checked(cands: list[Candidate]) -> list[Candidate]:
+            ok = [c for c in cands if c.ok]
+            for c in ok:
+                c.issues = check_candidate(cons, c.sql or "", c.result)
+            return ok
+
+        ok = checked(ans.candidates)
+        flagged = [c for c in ok if c.issues]
+        # a third, independent query when the first two can't be cross-checked, disagree, or all miss
+        # something the question states (agreeing on the same mistake is not evidence)
+        if len(ok) <= 1 or len(self._group(ok)) > 1 or (ok and len(flagged) == len(ok)):
+            feedback = list(dict.fromkeys(i for c in flagged for i in c.issues))
+            alt = self._sql_candidate(q, ans.assumptions, examples, previous_sql, alt=True, feedback=feedback)
             self._validate_and_run(alt, q, ans.answer_id, ans.role)
             ans.candidates.append(alt)
-            ok = [c for c in ans.candidates if c.ok]
+            ok = checked(ans.candidates)
         if not ok:
             errs = [f"{c.name}: {c.error}" for c in ans.candidates if c.error]
             ans.status = "error"
@@ -327,9 +343,15 @@ class DataMind:
                            "Try rephrasing it or naming the measure and grouping you want.")
             ans.alternatives = [{"note": e} for e in errs]
             return
-        groups = sorted(self._group(ok), key=lambda g: (-len(g), min(_PREFERENCE.get(c.name, 9) for c in g)))
+
+        def rank(c: Candidate) -> tuple[int, int]:
+            return len(c.issues), _PREFERENCE.get(c.name, 9)
+        # groups that cover the question come first, then larger agreement, then the semantic-model plan
+        groups = sorted(self._group(ok), key=lambda g: (0 if any(not c.issues for c in g) else 1, -len(g),
+                                                        min(_PREFERENCE.get(c.name, 9) for c in g)))
         best = groups[0]
-        ans.chosen = min(best, key=lambda c: _PREFERENCE.get(c.name, 9))
+        ans.chosen = min(best, key=rank)
+        ans.checks = list(ans.chosen.issues)
         n_ok, n_best = len(ok), len(best)
         if n_best >= 2 and len(groups) == 1:
             ans.confidence = "high"
@@ -340,13 +362,22 @@ class DataMind:
         elif n_ok == 1:
             ans.confidence = "medium"
             ans.agreement = "Only one query could be built and run, so the result was not cross-checked."
+        elif not ans.chosen.issues and any(c.issues for g in groups[1:] for c in g):
+            ans.confidence = "medium"
+            ans.agreement = (f"The {n_ok} independently generated queries disagree. Showing the only one that covers "
+                             "every condition in the question; the others are listed as alternatives.")
         else:
             ans.confidence = "low"
             ans.agreement = (f"The {n_ok} independently generated queries disagree. Showing the one built from "
                              "the verified semantic model; the others are listed as alternatives.")
+        if ans.checks:
+            # agreement on a query that misses a stated condition is not high confidence
+            if ans.confidence == "high":
+                ans.confidence = "medium"
+            ans.agreement += " Automatic check: " + "; ".join(ans.checks) + "."
         for g in groups[1:]:
-            c = min(g, key=lambda x: _PREFERENCE.get(x.name, 9))
-            ans.alternatives.append({"candidate": c.name, "sql": c.sql,
+            c = min(g, key=rank)
+            ans.alternatives.append({"candidate": c.name, "sql": c.sql, "issues": c.issues,
                                      "summary": summarize_rows(c.result.columns, c.result.rows)})  # type: ignore[union-attr]
 
     def _narrate(self, ans: Answer, q: str, res: QueryResult) -> None:

@@ -122,6 +122,43 @@ def test_masked_aggregate_is_reported_as_masked(model, duck):
     assert "masked" in a.message and "avg_balance" in a.message
 
 
+NO_YEAR_PLAN = {**PLAN, "filters": [PLAN["filters"][0]]}
+NO_YEAR_SQL = GOOD_SQL.replace(" AND o.o_orderdate >= '1994-01-01' AND o.o_orderdate < '1995-01-01'", "")
+
+
+def test_agreeing_on_a_dropped_condition_triggers_a_checked_retry(model, duck):
+    assert NO_YEAR_SQL != GOOD_SQL
+    seen = {}
+
+    def handler(task, prompt, opts):
+        if task == "plan":
+            return json.dumps(NO_YEAR_PLAN)
+        if task == "sql":
+            return NO_YEAR_SQL
+        if task == "sql_alt":
+            seen["feedback"] = "mentions 1994" in prompt
+            return GOOD_SQL
+        return make().handler(task, prompt, opts)
+    a = agent(model, duck, ScriptedLLM(handler)).ask("which asian nations bought the most in 1994?")
+    assert seen["feedback"], "the retry must be told what the first queries missed"
+    assert a.chosen.name == "sql_alt" and a.checks == [] and a.confidence == "medium"
+    assert "covers every condition" in a.agreement
+    assert all("1994" in i for c in a.candidates if c.name != "sql_alt" for i in c.issues)
+
+
+def test_answer_missing_a_condition_is_never_high_confidence(model, duck):
+    def handler(task, prompt, opts):
+        if task == "plan":
+            return json.dumps(NO_YEAR_PLAN)
+        if task in ("sql", "sql_alt"):
+            return NO_YEAR_SQL
+        return make().handler(task, prompt, opts)
+    a = agent(model, duck, ScriptedLLM(handler)).ask("which asian nations bought the most in 1994?")
+    assert a.status == "answered" and a.confidence == "medium"
+    assert a.checks and "1994" in a.checks[0] and "Automatic check" in a.agreement
+    assert a.to_json()["checks"] == a.checks
+
+
 def test_write_requests_never_reach_the_model(model, duck):
     llm = make()
     a = agent(model, duck, llm).ask("Delete all orders from 1992")

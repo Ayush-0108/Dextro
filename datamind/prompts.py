@@ -67,7 +67,9 @@ Rules:
   state that as an assumption.
 - Rewrite a follow-up into a standalone question using the conversation (e.g. "and in 1996?" -> the full question).
 
-Reply with exactly this JSON:
+Reply with JSON only, no explanation. Always include "category" and "standalone_question"; include the other
+fields only when they apply (assumptions for answerable, interpretations + clarifying_question for ambiguous,
+missing + clarifying_question for not_in_data, reason for unsafe):
 {{"category": "answerable|ambiguous|not_in_data|unsafe|chitchat",
   "standalone_question": "...",
   "assumptions": ["..."],
@@ -163,10 +165,14 @@ _SQL_RULES = """Rules:
 
 def sql_prompt(model: SemanticModel, question: str, assumptions: Sequence[str],
                examples: Sequence[dict[str, Any]], previous_sql: str | None = None,
-               alt: bool = False) -> tuple[str, str]:
+               alt: bool = False, feedback: Sequence[str] = ()) -> tuple[str, str]:
     prev = f"\nPREVIOUS QUERY IN THIS CONVERSATION (for follow-ups):\n```sql\n{previous_sql}\n```\n" if previous_sql else ""
     approach = ("Work it out independently: first decide the grain of each measure, then build CTEs step by step, "
                 "then the final SELECT.\n" if alt else "")
+    if feedback:
+        approach += ("Earlier queries for this question failed automatic checks:\n"
+                     + "".join(f"- {f}\n" for f in feedback)
+                     + "Write a query that applies every condition stated in the question.\n")
     prompt = f"""{model.render()}
 
 {_SQL_RULES.format(db=model.database, schema=model.schema_name)}
