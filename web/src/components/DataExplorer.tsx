@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Dataset } from "../types";
-import { DatabaseIcon, TableIcon, KeyIcon, SparkleIcon } from "./icons";
+import { DatabaseIcon, TableIcon, KeyIcon, SparkleIcon, PaperclipIcon } from "./icons";
 
 const TYPE_STYLES: Record<string, string> = {
   id: "bg-blue-50 text-blue-700 border-blue-200",
@@ -13,9 +13,11 @@ const TYPE_STYLES: Record<string, string> = {
 export default function DataExplorer({
   dataset,
   onAskQuestion,
+  onOpenUpload,
 }: {
   dataset: Dataset | undefined;
   onAskQuestion: (q: string) => void;
+  onOpenUpload?: () => void;
 }) {
   const entities = dataset?.entities || [];
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -51,6 +53,15 @@ export default function DataExplorer({
               {dataset.coverage || dataset.description || "Live schema and table relationships."}
             </p>
           </div>
+          {onOpenUpload && (
+            <button
+              onClick={onOpenUpload}
+              className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-sm hover:bg-stone-50 transition"
+            >
+              <PaperclipIcon className="h-3.5 w-3.5 text-emerald-600" />
+              <span>+ Upload New CSV</span>
+            </button>
+          )}
         </div>
       </div>
 

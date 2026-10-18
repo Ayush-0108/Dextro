@@ -234,6 +234,7 @@ async def upload_dataset(
 
     yaml_path = DATASET_DIR / f"{clean_id}.yaml"
     yaml_path.write_text(yaml_text, encoding="utf-8")
+    agent.cache_clear()
 
     return {
         "ok": True,

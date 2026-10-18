@@ -13,6 +13,7 @@ import {
   UserAvatarIcon,
   MoonIcon,
   SettingsIcon,
+  PaperclipIcon,
 } from "./icons";
 
 export default function Sidebar({
@@ -24,6 +25,7 @@ export default function Sidebar({
   onSelectHistory,
   onClearHistory,
   onOpenSettings,
+  onOpenUpload,
 }: {
   currentView: "ask" | "explorer" | "saved";
   onSelectView: (v: "ask" | "explorer" | "saved") => void;
@@ -33,6 +35,7 @@ export default function Sidebar({
   onSelectHistory: (q: string) => void;
   onClearHistory: () => void;
   onOpenSettings: () => void;
+  onOpenUpload: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
@@ -91,6 +94,13 @@ export default function Sidebar({
             }`}
           >
             <BookmarkIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onOpenUpload}
+            title="Upload Dataset (CSV)"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-50 transition"
+          >
+            <PaperclipIcon className="h-4 w-4" />
           </button>
         </div>
         <button
@@ -172,6 +182,20 @@ export default function Sidebar({
           >
             <DatabaseIcon className={`h-4 w-4 ${currentView === "explorer" ? "text-blue-600" : "text-stone-500"}`} />
             <span>Data Explorer</span>
+          </button>
+
+          {/* Upload CSV */}
+          <button
+            onClick={onOpenUpload}
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium text-stone-700 hover:bg-stone-100/70 transition"
+          >
+            <div className="flex items-center gap-2.5">
+              <PaperclipIcon className="h-4 w-4 text-emerald-600" />
+              <span>Upload Dataset</span>
+            </div>
+            <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+              CSV
+            </span>
           </button>
         </div>
 

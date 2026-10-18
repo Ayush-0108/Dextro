@@ -6,6 +6,7 @@ import Receipt from "./components/Receipt";
 import DataExplorer from "./components/DataExplorer";
 import SavedAnalyses, { type SavedItem } from "./components/SavedAnalyses";
 import SettingsModal from "./components/SettingsModal";
+import UploadModal from "./components/UploadModal";
 import type { Answer, Dataset, Health } from "./types";
 import {
   PaperclipIcon,
@@ -34,6 +35,7 @@ export default function App() {
   const [elapsed, setElapsed] = useState(0);
   const [loadError, setLoadError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [schemaMenuOpen, setSchemaMenuOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
@@ -282,6 +284,7 @@ export default function App() {
         }}
         onClearHistory={clearHistory}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenUpload={() => setUploadModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -301,6 +304,7 @@ export default function App() {
               setCurrentView("ask");
               setInput(q);
             }}
+            onOpenUpload={() => setUploadModalOpen(true)}
           />
         )}
 
@@ -389,8 +393,8 @@ export default function App() {
                         {/* Paperclip */}
                         <button
                           type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          title="Attach CSV, XLSX, or JSON"
+                          onClick={() => setUploadModalOpen(true)}
+                          title="Upload CSV Dataset"
                           className="flex h-7 w-7 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition"
                         >
                           <PaperclipIcon className="h-4 w-4" />
@@ -443,7 +447,7 @@ export default function App() {
                                 <button
                                   onClick={() => {
                                     setSchemaMenuOpen(false);
-                                    fileInputRef.current?.click();
+                                    setUploadModalOpen(true);
                                   }}
                                   className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-emerald-600 hover:bg-emerald-50 transition"
                                 >
@@ -454,6 +458,15 @@ export default function App() {
                             </div>
                           )}
                         </div>
+
+                        {/* Direct Upload Shortcut Button */}
+                        <button
+                          type="button"
+                          onClick={() => setUploadModalOpen(true)}
+                          className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 hover:underline transition ml-1"
+                        >
+                          + Upload CSV
+                        </button>
                       </div>
 
                       {/* Right: Enter hint & Send button */}
@@ -567,8 +580,8 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        title="Attach CSV"
+                        onClick={() => setUploadModalOpen(true)}
+                        title="Upload CSV Dataset"
                         className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition"
                       >
                         <PaperclipIcon className="h-4 w-4" />
@@ -615,6 +628,20 @@ export default function App() {
         health={health}
         role={role}
         onRole={setRole}
+      />
+
+      {/* Upload CSV Dataset Modal */}
+      <UploadModal
+        open={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        onSuccess={(newDatasets, newId) => {
+          setDatasets(newDatasets);
+          setDataset(newId);
+          setTurns([]);
+          setCurrentView("explorer");
+          setUploadNotice("✓ Dataset loaded successfully! Table schema and columns are ready below.");
+          setTimeout(() => setUploadNotice(null), 5000);
+        }}
       />
     </div>
   );
