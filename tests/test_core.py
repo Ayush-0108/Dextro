@@ -170,6 +170,8 @@ def test_metric_synonyms(model):
     "SELECT COUNT(*) FROM lineitem a, lineitem b",
     "SELECT COUNT(*) FROM lineitem l CROSS JOIN orders o",
     "SELECT COUNT(*) FROM lineitem l, orders o WHERE l.l_quantity = 1",
+    # Snowflake TO_CHAR has no quarter element: every date would get the label '1996-QQ'
+    "SELECT TO_CHAR(o.o_orderdate, 'YYYY-\"Q\"Q') AS q, COUNT(*) FROM orders o GROUP BY 1",
 ])
 def test_validator_rejects_unsafe(sql, model):
     assert not validate_sql(sql, model).ok
@@ -188,6 +190,11 @@ def test_validator_rejects_unsafe(sql, model):
 def test_validator_allows_linked_and_cte_cross_joins(sql, model):
     v = validate_sql(sql, model)
     assert v.ok, v.errors
+
+
+def test_validator_allows_quoted_q_and_other_to_char_formats(model):
+    assert validate_sql("SELECT TO_CHAR(o.o_orderdate, 'YYYY-MM') AS m FROM orders o", model).ok
+    assert validate_sql("SELECT TO_CHAR(o.o_orderdate, 'YYYY\"Q\"') AS m FROM orders o", model).ok
 
 
 def test_validator_caps_fetch(model):

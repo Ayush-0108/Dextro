@@ -26,6 +26,8 @@ _PER_GROUP = re.compile(r"\b(each|per|every)\b", re.I)
 _SINGLE = re.compile(r"^\s*(?:how many|how much|what (?:is|was|were) (?:the )?(?:total|average|overall|sum|count|number)\b)",
                      re.I)
 _GROUPING = re.compile(r"\b(each|per|by|every|breakdown|split|list|which|across|versus|vs|compare|and in)\b", re.I)
+_PERIOD_BREAKDOWN = re.compile(r"\b(?:each|every|per|by)\s+(quarter|month|week|year)\b"
+                               r"|\b(quarterly|monthly|weekly|yearly|annually)\b", re.I)
 _TIME_UNIT = re.compile(r"^\s*(?:day|week|month|quarter|year|hour|minute)s?\b", re.I)
 # category values that are also everyday words in questions ("ship mode", "high priority")
 _COMMON_WORDS = {"none", "ship", "high", "low", "medium", "open", "other", "pop"}
@@ -39,6 +41,7 @@ class Constraints:
     numbers: list[tuple[str, float, bool]] = field(default_factory=list)   # (text, value, is_percent)
     top_n: int | None = None
     single_value: bool = False
+    period_breakdown: str | None = None   # "quarter", "month", ...: the answer needs more than one row
 
 
 def _value_terms(model: SemanticModel) -> dict[str, str]:
@@ -68,6 +71,11 @@ def question_constraints(question: str, model: SemanticModel) -> Constraints:
     if m and not _PER_GROUP.search(q):
         cons.top_n = int(m.group(1) or m.group(2))
     cons.single_value = bool(_SINGLE.search(q)) and not _GROUPING.search(q)
+    pb = _PERIOD_BREAKDOWN.search(q)
+    if pb:
+        word = (pb.group(1) or pb.group(2)).lower()
+        cons.period_breakdown = {"quarterly": "quarter", "monthly": "month", "weekly": "week", "yearly": "year",
+                                 "annually": "year"}.get(word, word)
 
     # known category values, longest first so "REG AIR" wins over "AIR"
     masked = q
@@ -123,4 +131,6 @@ def check_candidate(cons: Constraints, sql: str, result: QueryResult | None) -> 
             issues.append(f"the question asks for the top {cons.top_n} but the query returned {n} rows")
         if cons.single_value and n > 1:
             issues.append(f"the question asks for a single number but the query returned {n} rows")
+        if cons.period_breakdown and n == 1:
+            issues.append(f"the question asks for a breakdown by {cons.period_breakdown} but the query returned 1 row")
     return issues

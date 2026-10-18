@@ -70,6 +70,12 @@ def validate_sql(sql: str, model: SemanticModel, max_rows: int = 1000) -> Valida
         name = str(fn.name).upper()
         if name.startswith(("SYSTEM$", "AI_")) or name in _BLOCKED_FUNCTIONS:
             errors.append(f"function {name} is not allowed")
+    for tc in tree.find_all(exp.ToChar):
+        fmt = tc.args.get("format")
+        if isinstance(fmt, exp.Literal) and re.search(r"q", re.sub(r'"[^"]*"', "", fmt.this), re.I):
+            # Snowflake has no quarter element: 'Q' is printed literally, so every date gets the same label
+            errors.append("TO_CHAR has no quarter format in Snowflake ('Q' is printed as text); "
+                          "use QUARTER(date) or DATE_TRUNC('QUARTER', date)")
     for dot in tree.find_all(exp.Dot):
         if isinstance(dot.expression, exp.Func):
             # e.g. SNOWFLAKE.CORTEX.COMPLETE: only Gemma may do the AI work, and only built-in SQL functions run

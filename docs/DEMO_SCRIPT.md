@@ -1,7 +1,10 @@
 # 5-minute demo script
 
 Record in one take with the real system (Snowflake + Gemma). Before recording: run `python -m datamind check`,
-warm the cache by asking each question once, and keep a Snowsight tab open on `snowflake/02_demo_data_change.sql`.
+then `python scripts/warm_demo.py` (asks every demo question once, in this order, so a 16 GB laptop answers in
+seconds instead of minutes), and keep a Snowsight tab open on `snowflake/02_demo_data_change.sql`. Be explicit
+when presenting: Gemma's replies come from the disk cache; every SQL query still runs live in Snowflake, with a new
+query id each time. Ask the questions in a fresh conversation in the order below.
 Rubric criteria in brackets.
 
 | Time | Do | Say |

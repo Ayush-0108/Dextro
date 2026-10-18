@@ -105,3 +105,12 @@ def test_hyphenated_words_still_count(model):
     assert set(c.values.values()) == {"1-URGENT", "ASIA"}
     issues = check_candidate(c, "SELECT COUNT(*) FROM orders WHERE o_orderpriority = 1", None)
     assert any("1-URGENT" in i for i in issues)
+
+
+def test_period_breakdown_needs_more_than_one_row(model):
+    c = question_constraints("What was revenue in each quarter of 1996?", model)
+    assert c.period_breakdown == "quarter"
+    assert "breakdown by quarter" in check_candidate(c, "SELECT 1 /* 1996 */", rows(1))[0]
+    assert check_candidate(c, "SELECT 1 /* 1996 */", rows(4)) == []
+    assert question_constraints("Show monthly order counts for 1997", model).period_breakdown == "month"
+    assert question_constraints("How many orders were placed in 1997?", model).period_breakdown is None
