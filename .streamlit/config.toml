@@ -1,0 +1,11 @@
+# Nexora UI theme: clean light enterprise look (slate neutrals, emerald for verified, amber for warnings)
+[theme]
+base = "light"
+primaryColor = "#059669"
+backgroundColor = "#F8FAFC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0F172A"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false

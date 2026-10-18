@@ -42,14 +42,17 @@ def _path(env: str, default: str) -> Path:
     return p if p.is_absolute() else ROOT / p
 
 
-def dataset_path() -> Path:
+def dataset_path(dataset: str | Path | None = None) -> Path:
+    if dataset:
+        p = Path(dataset)
+        return p if p.is_absolute() else ROOT / p
     return _path("DATAMIND_DATASET", "config/datasets/tpch.yaml")
 
 
-def build_model() -> SemanticModel:
+def build_model(dataset: str | Path | None = None) -> SemanticModel:
     # the dataset YAML names its own database and schema, so switching datasets is one setting (DATAMIND_DATASET);
     # SNOWFLAKE_DATABASE / SNOWFLAKE_SCHEMA in .env must not silently point a dataset at another dataset's tables
-    return load_model(dataset_path())
+    return load_model(dataset_path(dataset))
 
 
 def build_executor(model: SemanticModel, engine: str | None = None):
@@ -61,9 +64,10 @@ def build_executor(model: SemanticModel, engine: str | None = None):
     raise ValueError(f"unknown DATAMIND_ENGINE {engine!r}")
 
 
-def build(engine: str | None = None, llm: LLM | None = None) -> DataMind:
+def build(engine: str | None = None, llm: LLM | None = None, dataset: str | Path | None = None) -> DataMind:
+    """A ready agent. `dataset` (a semantic-model YAML) overrides DATAMIND_DATASET, e.g. for a dataset switcher."""
     load_dotenv()
-    model = build_model()
+    model = build_model(dataset)
     executor = build_executor(model, engine)
     examples = ExampleStore.load(_path("DATAMIND_EXAMPLES", f"eval/{model.name}_dev.yaml"))
     return DataMind(

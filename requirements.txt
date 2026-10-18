@@ -6,5 +6,6 @@ sqlglot==30.23.0
 pydantic==2.13.5
 PyYAML==6.0.3
 streamlit==1.66.0
+plotly==7.1.0          # charts in the UI
 pandas==3.0.5
 duckdb==1.5.6          # offline tests and independent ground-truth computation only
