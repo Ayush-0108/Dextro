@@ -7,5 +7,7 @@ pydantic==2.13.5
 PyYAML==6.0.3
 streamlit==1.66.0
 plotly==7.1.0          # charts in the UI
+fastapi==0.142.0       # REST API for the React frontend (api/)
+uvicorn==0.54.0
 pandas==3.0.5
 duckdb==1.5.6          # offline tests and independent ground-truth computation only
