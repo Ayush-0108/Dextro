@@ -62,7 +62,7 @@ result equality (disagreement → 3rd query, majority) → explanation from the 
 ```bash
 pip install -r requirements-dev.txt
 python scripts/make_local_tpch.py --scale 0.01          # test data (scale 1 for independent gold)
-python -m pytest -q                                     # 55 offline tests; must pass before every commit
+python -m pytest -q                                     # 123 offline tests; must pass before every commit
 python -m datamind check                                # Snowflake + Gemma connectivity
 python -m datamind ask "What was revenue in 1995?"       # one question, prints SQL/evidence
 python -m datamind eval [--paraphrases] [--ids j01,m03] # accuracy report -> eval/reports/

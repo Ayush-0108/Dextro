@@ -162,7 +162,7 @@ hold-out set ([template](eval/HOLDOUT_TEMPLATE.yaml)) is written by a teammate w
 ```bash
 pip install -r requirements-dev.txt
 python scripts/make_local_tpch.py --scale 0.01
-python -m pytest -q          # 55 tests, ~6 s, fully offline
+python -m pytest -q          # 123 tests, ~6 s, fully offline
 ```
 
 Tests cover the compiler (fan-out guard, role-playing tables, value normalisation), the SQL validator (writes,
