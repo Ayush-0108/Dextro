@@ -39,48 +39,76 @@ class LLM:
 
 
 class GemmaAPI(LLM):
-    def __init__(self, model: str | None = None, api_key: str | None = None, max_retries: int = 5):
+    def __init__(self, model: str | None = None, api_key: str | None = None, max_retries: int = 5,
+                 timeout_s: float | None = None, client: Any = None):
         self.model = require_gemma(model or os.getenv("GEMMA_MODEL", "gemma-4-31b-it"))
         self.name = f"gemini-api:{self.model}"
-        key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        if not key:
-            raise LLMError("set GEMINI_API_KEY (free key from https://aistudio.google.com/apikey)")
-        from google import genai
-        self._genai = genai
-        self.client = genai.Client(api_key=key)
         self.max_retries = max_retries
+        self.timeout_s = float(timeout_s or os.getenv("GEMMA_TIMEOUT_S", "120"))
+        if client is None:
+            key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            if not key:
+                raise LLMError("set GEMINI_API_KEY (free key from https://aistudio.google.com/apikey)")
+            from google import genai
+            from google.genai import types
+            # without a timeout a stalled request would hang the app indefinitely
+            client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=int(self.timeout_s * 1000)))
+        self.client = client
+        self._fold_system = False       # set if the API rejects system instructions for this model
+        self._thinking_config = True    # set to False if the model rejects thinking settings
 
     def complete(self, prompt: str, system: str | None = None, temperature: float = 0.0,
                  thinking: bool = False, json_mode: bool = False, sample: int = 0) -> str:
         from google.genai import types
-        cfg: dict[str, Any] = {"temperature": temperature, "max_output_tokens": 4096}
-        if system:
-            cfg["system_instruction"] = system
-        try:
-            cfg["thinking_config"] = types.ThinkingConfig(thinking_level="high" if thinking else "minimal")
-        except Exception:
-            pass
-        delay = 2.0
+        delay, last = 2.0, ""
         for attempt in range(self.max_retries):
+            # thinking tokens share the output budget, so leave room for the reasoning and the answer
+            cfg: dict[str, Any] = {"temperature": temperature, "max_output_tokens": 8192}
+            contents = prompt
+            if system and self._fold_system:
+                contents = f"{system}\n\n{prompt}"
+            elif system:
+                cfg["system_instruction"] = system
+            if self._thinking_config:
+                cfg["thinking_config"] = types.ThinkingConfig(thinking_level="high" if thinking else "minimal")
             try:
                 resp = self.client.models.generate_content(
-                    model=self.model, contents=prompt, config=types.GenerateContentConfig(**cfg))
+                    model=self.model, contents=contents, config=types.GenerateContentConfig(**cfg))
                 text = resp.text or ""
                 if not text.strip():
                     raise LLMError("empty response")
                 return text
             except Exception as e:  # rate limits and transient server errors are retried
-                msg = str(e)
-                retryable = any(s in msg for s in ("429", "RESOURCE_EXHAUSTED", "500", "503", "UNAVAILABLE",
-                                                     "deadline", "empty response", "timed out"))
-                if "thinking" in msg.lower() and "thinking_config" in cfg:
-                    cfg.pop("thinking_config")
+                last = str(e)
+                low = last.lower()
+                if system and not self._fold_system and _rejects_system_instruction(low):
+                    self._fold_system = True      # Gemma models have rejected system instructions before
                     continue
-                if not retryable or attempt == self.max_retries - 1:
-                    raise LLMError(f"Gemma API call failed: {msg[:300]}") from e
-                time.sleep(delay)
+                if self._thinking_config and "thinking" in low:
+                    self._thinking_config = False
+                    continue
+                if not any(s in low for s in _RETRYABLE) or attempt == self.max_retries - 1:
+                    raise LLMError(f"Gemma API call failed: {last[:300]}") from e
+                time.sleep(min(60.0, max(delay, _retry_delay(last))))
                 delay *= 2
-        raise LLMError("unreachable")
+        raise LLMError(f"Gemma API call failed after {self.max_retries} attempts: {last[:300]}")
+
+
+_RETRYABLE = ("429", "resource_exhausted", "500", "502", "503", "504", "unavailable", "deadline",
+              "empty response", "timed out", "timeout", "temporarily", "connection reset")
+
+
+def _rejects_system_instruction(low: str) -> bool:
+    return "developer instruction" in low or (
+        ("system instruction" in low or "system_instruction" in low)
+        and any(s in low for s in ("not enabled", "not supported", "unsupported", "invalid")))
+
+
+def _retry_delay(message: str) -> float:
+    """Seconds the API asked us to wait (Gemini puts 'retryDelay': '17s' in 429 errors), else 0."""
+    m = re.search(r"retry[_ ]?delay['\"]?\s*[:=]\s*['\"]?(\d+(?:\.\d+)?)s", message, re.I) or \
+        re.search(r"retry in (\d+(?:\.\d+)?)\s*s", message, re.I)
+    return float(m.group(1)) if m else 0.0
 
 
 class GemmaOllama(LLM):
