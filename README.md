@@ -97,7 +97,8 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Quick start
 
 Prerequisites: Python 3.11–3.13 (tested on 3.12), a Snowflake account (the free 30-day trial works — pick **Enterprise** edition at
-sign-up), and local [Ollama](https://ollama.com) running `gemma4:12b` (zero API keys required, 100% free and reproducible) or a Google AI Studio key.
+sign-up), and Gemma: either local [Ollama](https://ollama.com) running `gemma4:12b` (no API key, free) or Gemma 4 31B
+through [Hugging Face Inference Providers](https://huggingface.co/google/gemma-4-31B-it) (HF token + credits).
 
 ```bash
 git clone https://github.com/ZERODAY-2026/Dextro.git && cd Dextro
@@ -123,16 +124,17 @@ pip install -r requirements.txt
 | Variable | Default | Meaning |
 |---|---|---|
 | `SNOWFLAKE_*` | see `.env.example` | connection; role defaults to the read-only `DATAMIND_AGENT` |
-| `GEMMA_BACKEND` | `ollama` | `ollama` (local, zero-API) or `api` (Gemini API) |
-| `GEMMA_MODEL` | `gemma4:12b` | any Gemma model; non-Gemma names are strictly rejected |
+| `GEMMA_BACKEND` | `ollama` | `ollama` (local, free) or `hf` (Hugging Face Inference Providers) |
+| `GEMMA_MODEL` | `gemma4:12b` | `gemma4:12b` / `gemma4:31b` (Ollama) or `google/gemma-4-31B-it` (hf); non-Gemma names are rejected |
+| `HF_TOKEN`, `HF_PROVIDER` | – | hf backend only: token with Inference Providers permission; optional provider pin (`novita`, `deepinfra`) |
 | `GEMMA_THINKING` | `1` | let Gemma reason before plans/SQL (slower, more accurate) |
 | `DATAMIND_DATASET` | `config/datasets/tpch.yaml` | the semantic model to use (`tpch.yaml` or `chinook.yaml`) |
 | `DATAMIND_ENGINE` | `snowflake` | `duckdb` = offline development only |
 | `DATAMIND_MAX_ROWS` | `1000` | row cap per query |
 
 Troubleshooting: `python -m datamind check` prints which side failed. "Insufficient privileges" → re-run the
-setup script. Gemini `429` → free-tier rate limit; responses are cached in `.cache/llm`, so re-runs are free —
-wait a minute or switch to Ollama. "Object does not exist" → `SNOWFLAKE_DATABASE`/`SCHEMA` don't match the setup.
+setup script. Hugging Face `429` → rate limit (retried automatically, honouring `Retry-After`); `402` → credits exhausted.
+Responses are cached in `.cache/llm`, so re-runs of identical prompts are free. "Object does not exist" → `SNOWFLAKE_DATABASE`/`SCHEMA` don't match the setup.
 
 ## Using it
 
@@ -161,7 +163,8 @@ Cortex is not used: model inference is Gemma's job, kept separate from data stor
 
 ## How Gemma is used
 
-Gemma 4 (default `gemma-4-31b-it` via the Gemini API; `gemma4:12b` via Ollama on a 16 GB laptop) performs the central AI tasks:
+Gemma 4 (`gemma4:12b` locally via Ollama on a 16 GB laptop, or `google/gemma-4-31B-it` via Hugging Face Inference
+Providers) performs the central AI tasks:
 classifying and rewriting questions, producing structured query plans, writing and repairing Snowflake SQL, and
 writing the final answer. Every Gemma output is validated before use (JSON schema for plans, the SQL validator and
 Snowflake itself for SQL, the number checker for prose), and Gemma never executes anything. See
@@ -249,8 +252,8 @@ many-to-one joins only where the target key is actually unique. See [docs/ADDING
 - Local test data is generated on your machine by [tpchgen-cli](https://github.com/clflushopt/tpchgen-rs) (Apache-2.0)
   and git-ignored.
 - **Gemma** model weights and API use are governed by the licence on Google's official Gemma 4 model card — review it
-  before use. On the Gemini API free tier, Google's terms may allow prompts to be used to improve its products; DataMind
-  sends schema descriptions, questions and query results. For sensitive data, use the local Ollama backend.
+  before use. With the hf backend, prompts (schema descriptions, questions, query results) go to the chosen Hugging Face
+  inference provider under its terms; for sensitive data, use the local Ollama backend.
 - Code: [MIT](LICENSE).
 
 ## Known limitations
@@ -261,7 +264,9 @@ many-to-one joins only where the target key is actually unique. See [docs/ADDING
   those rely on Gemma's SQL plus the cross-check (the plan path reports itself as "not expressible").
 - The number checker accepts simple derived numbers (differences, ratios, shares, totals); a hallucinated number
   that coincidentally equals such a derivation would be marked "derived", not "verified". The UI shows which.
-- The free Gemini API tier has low daily request caps; each question uses 4–8 Gemma calls. Caching and the Ollama backend help.
+- Each question uses 4–6 Gemma calls (plus one when a check fails). Locally, `gemma4:12b` on a 16 GB laptop takes
+  ~1.5–3.5 minutes per question (measured: 218 s; ~20–28 s of each call is reading the schema). The hf backend is
+  much faster but costs Hugging Face credits.
 - One semantic model at a time per app instance; multi-dataset questions are out of scope.
 
 ## Main technical contribution

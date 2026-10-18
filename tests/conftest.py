@@ -46,3 +46,13 @@ def duck_sf1():
     if len(list(d.glob("*.parquet"))) < 8:
         pytest.skip("SF1 data not generated (python scripts/make_local_tpch.py --scale 1)")
     return DuckDBExecutor(d)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def no_real_credentials_in_tests():
+    """Fail loudly if any test loaded the developer's real .env into the environment."""
+    import os
+    before = {k for k in os.environ if k.startswith(("SNOWFLAKE_", "GEMINI_", "HF_TOKEN"))}
+    yield
+    leaked = {k for k in os.environ if k.startswith(("SNOWFLAKE_", "GEMINI_", "HF_TOKEN"))} - before
+    assert not leaked, f"tests leaked real configuration into the environment: {sorted(leaked)}"

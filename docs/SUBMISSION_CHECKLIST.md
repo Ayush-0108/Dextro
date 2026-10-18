@@ -7,7 +7,7 @@ Status key: ✅ in the repo · 🟡 team action needed
 | Gate | Where | Status |
 |---|---|---|
 | G1 Open-source repo + licence | `LICENSE` (MIT) | 🟡 push to a **public** GitHub repo |
-| G2 Reproducible demo | README quick start; `snowflake/01_setup.sql` works on a free trial; free Gemini key or local Ollama | ✅ + 🟡 keep a trial account alive through judging (see below) |
+| G2 Reproducible demo | README quick start; `snowflake/01_setup.sql` works on a free trial; local Ollama (free) or Gemma 31B via Hugging Face | ✅ + 🟡 keep a trial account alive through judging (see below) |
 | G3 Real system | Live Snowflake + Gemma; the scripted model exists only under `tests/` | ✅ |
 | G4 Data disclosure | README → Data and licences | ✅ |
 | G5 No secrets | `.env`/keys git-ignored; `.env.example` only | ✅ + 🟡 run `git log -p | grep -i -E "password|api_key"` before publishing |
@@ -43,7 +43,7 @@ Status key: ✅ in the repo · 🟡 team action needed
 ## Team actions, in order
 
 1. Create the Snowflake trial (**Enterprise**, choose region once — it can't be changed), run `01_setup.sql`.
-2. Get a Gemini API key; `python -m datamind check`.
+2. Ollama `gemma4:12b` (or HF token for 31B); `python -m datamind check`.
 3. `python -m datamind check-gold --independent duckdb` (after `make_local_tpch.py --scale 1`) — confirms Snowflake's data equals the reference data.
 4. `python -m datamind eval` — read the failures, improve the semantic model notes / prompts, re-run. Commit reports.
 5. A teammate writes `eval/tpch_holdout.yaml` (≥ 30 questions) without seeing prompts; run it once near the end; report it honestly.

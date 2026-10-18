@@ -16,6 +16,8 @@ def app(model, duck, monkeypatch):
     from datamind.retrieval import ExampleStore
     from fakes import oracle_llm
 
+    # the app loads .env on start; tests must never pick up the developer's real credentials
+    monkeypatch.setattr(cfg, "load_dotenv", lambda *a, **k: None)
     monkeypatch.setattr(cfg, "build", lambda *a, **k: DataMind(
         model, duck, oracle_llm(), examples=ExampleStore.load(ROOT / "eval" / "tpch_dev.yaml"), log_dir=None))
     at = st_testing.AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60)

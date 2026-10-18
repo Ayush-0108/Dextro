@@ -26,7 +26,7 @@ def test_env_example_parses_to_clean_values(tmp_path, monkeypatch):
     root = Path(__file__).resolve().parent.parent
     monkeypatch.setattr(os, "environ", {})   # isolated: nothing from .env.example leaks into other tests
     load_dotenv(root / ".env.example")
-    assert os.environ["GEMMA_BACKEND"] == "api" and os.environ["GEMMA_MODEL"] == "gemma-4-31b-it"
+    assert os.environ["GEMMA_BACKEND"] == "ollama" and os.environ["GEMMA_MODEL"] == "gemma4:12b"
     assert os.environ["SNOWFLAKE_ROLE"] == "DATAMIND_AGENT" and os.environ["DATAMIND_ENGINE"] == "snowflake"
 
 

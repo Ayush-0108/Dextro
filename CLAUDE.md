@@ -35,7 +35,7 @@ result equality (disagreement → 3rd query, majority) → explanation from the 
 | `datamind/plan.py` | QueryPlan schema + compiler + double-counting (fan-out) guard |
 | `datamind/sqlcheck.py` | SELECT-only validator, table/column checks, row cap, write-intent regex |
 | `datamind/pipeline.py` | orchestration, confidence, fallbacks, run log `runs/answers.jsonl` |
-| `datamind/prompts.py`, `llm.py` | Gemma prompts; Gemini API / Ollama clients; disk cache `.cache/llm` |
+| `datamind/prompts.py`, `llm.py` | Gemma prompts; Ollama / Hugging Face clients (no Google AI Studio: jury ruling); disk cache `.cache/llm` |
 | `datamind/executors.py` | Snowflake (read-only role, QUERY_TAG) and DuckDB (offline tests / independent gold only) |
 | `datamind/compare.py`, `numbers.py`, `explain.py` | result equivalence, number grounding, AST explanations |
 | `datamind/evaluation.py`, `eval/` | eval harness + 66-question dev set (9 tiers incl. follow-ups, robustness) with gold SQL |

@@ -11,7 +11,7 @@
 | `compare.py` | Result-set equivalence used for candidate agreement and evaluation. | no |
 | `explain.py` | Plain-English explanation derived from the executed SQL's syntax tree. | no |
 | `numbers.py` | Checks every number in the written answer against the result rows. | no |
-| `llm.py` | Gemma clients (Gemini API, Ollama), disk cache, Gemma-only guard, JSON extraction. | — |
+| `llm.py` | Gemma clients (Ollama, Hugging Face Inference Providers; Gemini API kept but unused), disk cache, Gemma-only guard, JSON extraction. | — |
 | `prompts.py` | Prompts for router, planner, SQL writer, repairer, narrator. | — |
 | `pipeline.py` | Orchestration, reconciliation, confidence, fallbacks, run log. | — |
 | `retrieval.py` | Few-shot retrieval of verified question→SQL pairs (dev split only). | no |

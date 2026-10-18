@@ -50,3 +50,11 @@ Chose Chinook (digital media store database, MIT licence, pinned commit `7f67772
 reusability via semantic model configuration alone: handles role-playing tables (`employee` as `support_rep` vs
 `manager`), many-to-many relationship (`playlist_track` non-fanout handling), Snowflake setup and staging DDL,
 and a 22-item evaluation set with 100% verified gold SQL.
+
+## 2026-10-18 — Gemma backend: no Google AI Studio; Ollama locally, 31B via Hugging Face
+The jury ruled that Gemma may not be used through Google AI Studio / the Gemini API, and that a 31B model must come
+from Hugging Face. Gemma 4 31B (`google/gemma-4-31B-it`, ungated) is live on Hugging Face Inference Providers
+(Novita $0.14/M input, $0.40/M output; DeepInfra $0.20/$0.40; free HF accounts get no included credits). Running 31B
+locally needs ~19 GB+ and doesn't fit the team's 16 GB laptops. So: default backend `ollama` with `gemma4:12b` (free,
+reproducible; measured 218 s/question), and a new `hf` backend for 31B through the OpenAI-compatible router. The
+Gemini API client remains in the code but is not used or documented for this event.

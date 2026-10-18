@@ -1,8 +1,9 @@
 """Gemma model clients.
 
-Two interchangeable backends, both serving Google Gemma:
-  * GemmaAPI    - Gemma 4 through the Gemini API (free tier key from Google AI Studio)
-  * GemmaOllama - Gemma 4 running locally through Ollama
+Interchangeable backends, all serving Google Gemma (open weights):
+  * GemmaOllama - Gemma 4 running locally through Ollama (free, fully local; default for reproduction)
+  * GemmaHF     - Gemma 4 31B through Hugging Face Inference Providers (OpenAI-compatible router, HF token)
+  * GemmaAPI    - Gemma 4 through the Gemini API (not used for this event: the jury ruled out Google AI Studio)
 Model inference is kept separate from data storage and query execution (Snowflake).
 Responses are cached on disk so evaluation reruns are reproducible and cheap on rate limits.
 """
@@ -118,6 +119,86 @@ def _retry_delay(message: str) -> float:
     return float(m.group(1)) if m else 0.0
 
 
+class GemmaHF(LLM):
+    """Gemma served by Hugging Face Inference Providers through the OpenAI-compatible router.
+
+    The model id is the Hugging Face repo (default google/gemma-4-31B-it). HF_PROVIDER pins a provider
+    (e.g. novita, deepinfra); without it Hugging Face picks one. Needs HF_TOKEN with the
+    "Make calls to Inference Providers" permission; usage is billed to that account's credits.
+    """
+
+    def __init__(self, model: str | None = None, token: str | None = None, provider: str | None = None,
+                 max_retries: int = 5, timeout_s: float | None = None, transport: httpx.BaseTransport | None = None):
+        self.model = require_gemma(model or os.getenv("GEMMA_MODEL", "google/gemma-4-31B-it"))
+        if "/" not in self.model:
+            raise LLMError(f"GEMMA_MODEL for the hf backend is a Hugging Face repo id like google/gemma-4-31B-it, "
+                           f"got {self.model!r}")
+        provider = provider or os.getenv("HF_PROVIDER")
+        self.route = f"{self.model}:{provider}" if provider else self.model
+        self.name = f"hf:{self.route}"
+        tok = token or os.getenv("HF_TOKEN")
+        if not tok:
+            raise LLMError("set HF_TOKEN (https://huggingface.co/settings/tokens, permission "
+                           "'Make calls to Inference Providers')")
+        self.base = os.getenv("HF_BASE_URL", "https://router.huggingface.co/v1").rstrip("/")
+        self.max_retries = max_retries
+        timeout = float(timeout_s or os.getenv("GEMMA_TIMEOUT_S", "120"))
+        self.http = httpx.Client(timeout=timeout, transport=transport,
+                                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+        self._json_mode = True   # set to False if the provider rejects response_format
+        self.stats = {"requests": 0, "rate_limited": 0, "waited_s": 0.0}
+
+    def complete(self, prompt: str, system: str | None = None, temperature: float = 0.0,
+                 thinking: bool = False, json_mode: bool = False, sample: int = 0) -> str:
+        messages = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
+        delay, last = 2.0, ""
+        for attempt in range(self.max_retries):
+            body: dict[str, Any] = {"model": self.route, "messages": messages, "temperature": temperature,
+                                    "max_tokens": 8192}
+            if json_mode and self._json_mode:
+                body["response_format"] = {"type": "json_object"}
+            self.stats["requests"] += 1
+            try:
+                r = self.http.post(f"{self.base}/chat/completions", json=body)
+            except httpx.HTTPError as e:   # timeouts and dropped connections are retried
+                last, status, retry_after = f"{type(e).__name__}: {e}", 0, 0.0
+            else:
+                if r.status_code < 400:
+                    try:
+                        text = r.json()["choices"][0]["message"].get("content") or ""
+                    except (ValueError, KeyError, IndexError, TypeError):
+                        text = ""
+                    if text.strip():
+                        return text
+                    last, status, retry_after = "empty response", 0, 0.0
+                else:
+                    last, status = f"HTTP {r.status_code}: {r.text[:300]}", r.status_code
+                    try:
+                        retry_after = float(r.headers.get("retry-after", 0))
+                    except ValueError:
+                        retry_after = 0.0
+                    if status == 400 and "response_format" in body and "response_format" in r.text.lower():
+                        self._json_mode = False   # provider without JSON mode: the prompt still asks for JSON
+                        continue
+                    if status in (401, 403):
+                        raise LLMError(f"Hugging Face rejected the token ({status}); check HF_TOKEN and its "
+                                       "Inference Providers permission")
+                    if status == 402:
+                        raise LLMError("Hugging Face Inference Providers credits are exhausted (402); add credits "
+                                       "or switch GEMMA_BACKEND=ollama")
+                    if status not in (408, 409, 429) and status < 500:
+                        raise LLMError(f"Gemma (Hugging Face) call failed: {last}")
+            if attempt == self.max_retries - 1:
+                break
+            wait = min(60.0, max(delay, retry_after))
+            if status == 429:
+                self.stats["rate_limited"] += 1
+            self.stats["waited_s"] = round(self.stats["waited_s"] + wait, 1)
+            time.sleep(wait)
+            delay *= 2
+        raise LLMError(f"Gemma (Hugging Face) call failed after {self.max_retries} attempts: {last[:300]}")
+
+
 class GemmaOllama(LLM):
     def __init__(self, model: str | None = None, host: str | None = None, timeout: float = 300):
         self.model = require_gemma(model or os.getenv("GEMMA_MODEL", "gemma4:12b"))
@@ -194,13 +275,15 @@ class ScriptedLLM(LLM):
 
 
 def make_llm(backend: str | None = None, model: str | None = None, cache: bool = True) -> LLM:
-    backend = (backend or os.getenv("GEMMA_BACKEND", "api")).lower()
-    if backend in ("api", "gemini", "gemini-api"):
-        inner: LLM = GemmaAPI(model)
+    backend = (backend or os.getenv("GEMMA_BACKEND", "ollama")).lower()
+    if backend in ("hf", "huggingface", "hugging-face"):
+        inner: LLM = GemmaHF(model)
+    elif backend in ("api", "gemini", "gemini-api"):
+        inner = GemmaAPI(model)
     elif backend == "ollama":
         inner = GemmaOllama(model)
     else:
-        raise ValueError(f"unknown GEMMA_BACKEND {backend!r} (use 'api' or 'ollama')")
+        raise ValueError(f"unknown GEMMA_BACKEND {backend!r} (use 'ollama' or 'hf')")
     return CachedLLM(inner, os.getenv("DATAMIND_CACHE_DIR", ".cache/llm"), enabled=cache)
 
 
