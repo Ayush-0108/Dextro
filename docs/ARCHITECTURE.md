@@ -69,3 +69,9 @@
 | Runaway cost | X-Small, 60 s auto-suspend, 120 s statement timeout, row cap, daily resource monitor |
 | PII exposure | Masking policy on phone/balance for the restricted role; DataMind reports masked columns |
 | Secrets in repo | `.env` and key files git-ignored; `.env.example` only |
+
+## Coverage and shape checks (added 2026-10-18)
+`datamind/verify.py` runs after execution, before reconciliation. It extracts the years, thresholds, known category
+values, "top N" and single-number phrasing from the (standalone) question and checks each executed candidate's SQL
+and row count against them. Results: preference among disagreeing candidates, a cap at medium confidence, and one
+feedback-driven SQL retry when every candidate fails. It makes no model calls. Tests: `tests/test_verify.py`.
