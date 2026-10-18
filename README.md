@@ -202,6 +202,10 @@ many-to-one joins only where the target key is actually unique. See [docs/ADDING
 - **TPC-H** data comes from Snowflake's shared `SNOWFLAKE_SAMPLE_DATA.TPCH_SF1` and is copied only *inside your own
   Snowflake account* by the setup script. No data is committed to this repository. TPC-H is a synthetic benchmark
   dataset from the Transaction Processing Performance Council; it contains no real people or companies.
+- **Chinook** sample music store database is sourced from [github.com/lerocha/chinook-database](https://github.com/lerocha/chinook-database)
+  (`ChinookDatabase/DataSources/Chinook_Sqlite.sqlite`, pinned commit `7f67772503d71ba90f19283c38e93923addb43fa`, MIT licence).
+  Exported locally via `scripts/get_chinook.py` and loaded into Snowflake `DATAMIND_DB.CHINOOK` via `snowflake/10_chinook_setup.sql`
+  and `scripts/load_chinook.py`. No data is committed to git.
 - Local test data is generated on your machine by [tpchgen-cli](https://github.com/clflushopt/tpchgen-rs) (Apache-2.0)
   and git-ignored.
 - **Gemma** model weights and API use are governed by the licence on Google's official Gemma 4 model card — review it

@@ -44,3 +44,9 @@ password sign-in ([docs](https://docs.snowflake.com/en/user-guide/security-mfa-r
 the judge's own trial login + password (no key generation), while the app still queries only as `DATAMIND_AGENT`
 with secondary roles off. Key-pair sign-in for the `TYPE = SERVICE` user `DATAMIND_APP` stays supported for
 non-trial accounts and long-lived deployments.
+
+## 2026-10-18 — Chinook as second dataset (reusability criterion, 8 points)
+Chose Chinook (digital media store database, MIT licence, pinned commit `7f67772`) to demonstrate zero-code
+reusability via semantic model configuration alone: handles role-playing tables (`employee` as `support_rep` vs
+`manager`), many-to-many relationship (`playlist_track` non-fanout handling), Snowflake setup and staging DDL,
+and a 22-item evaluation set with 100% verified gold SQL.

@@ -3,23 +3,24 @@
 _Last updated: 2026-10-18 (end of session 2). Team repo: https://github.com/ZERODAY-2026/Dextro (main)._
 
 ## Verified
-- **Tests:** `python -m pytest -q` → 145 passed, 0 failed (Python 3.12.13, macOS, Apple M5, 16 GB), including the
-  SF1 two-engine gold check with locally generated data. CI on Dextro: last two runs green (CI skips the SF1 test).
+- **Tests:** `python -m pytest -q` → 153 passed, 0 failed (Python 3.12.13, macOS, Apple M5, 16 GB), including all
+  TPC-H tests, gold SQL verification, and the Chinook second-dataset test suite. CI skips the SF1 test.
 - **Snowflake trial (live, run by Kanhaiya in Snowsight as ACCOUNTADMIN):** region AWS_AP_SOUTH_1; masking policy
   created → **Enterprise edition or higher**; SNOWFLAKE_SAMPLE_DATA present, TPCH_SF1.ORDERS = 1,500,000 rows;
   test database dropped. Owner user: TYPE null, has_password true, has_mfa false → app uses its own key-pair user.
 - **Repo hygiene:** no `.env`, keys, `CLAUDE.local.md`, `private/` or data in git; account identifier and login
   name absent from the whole history (checked before pushing).
+- **Local Ollama Gemma model:** `gemma4:12b` (7.7 GB) downloaded and verified via `ollama list`.
 
 ## Not verified
 - `snowflake/01_setup.sql` has **not** been run (no DATAMIND_DB, roles, masking policies or DATAMIND_APP yet).
 - Sign-in: quick start is now password on the trial (exempt from Snowflake's MFA rollout, per Snowflake docs);
   key pair for `DATAMIND_APP` is optional. Neither has been tried against the live account yet.
 - No `.env`: `python -m datamind check` fails on both sides (`SNOWFLAKE_ACCOUNT` missing; `GEMINI_API_KEY` missing).
-- Gemma has **never** been called. Defaults: `GEMMA_BACKEND=api`, `GEMMA_MODEL=gemma-4-31b-it`. Google's docs list
+- Gemma has **never** been called live. Defaults: `GEMMA_BACKEND=api`, `GEMMA_MODEL=gemma-4-31b-it`. Google's docs list
   that id, `system_instruction` and `thinking_level` high/minimal, matching our client; free-tier rate limits are
   unknown until the first eval, which now records requests, 429s, waits and latency (audit C5). Local fallback:
-  Ollama `gemma4:12b` (not installed or tried).
+  Ollama `gemma4:12b` (downloaded and ready).
 - No eval has been run against Snowflake + Gemma. No accuracy numbers exist. No hold-out file exists.
 - `check-gold` against Snowflake not run (gold SQL only verified on DuckDB, two scales).
 - Streamlit app not opened against live services.
@@ -63,7 +64,7 @@ identifiers). None marked won't-fix.
 | Snowflake depth | 15 | ok (scripted, not run) | roles, masking, monitor, tags, Time Travel demo in scripts |
 | Gemma depth | 12 | ok (untested live) | router, planner, SQL, repair, narrator |
 | Ambiguity / errors / unsafe | 12 | ok | router categories, write guard, hardened validator; no adversarial suite yet |
-| Reusability (2nd dataset) | 8 | **missing** | `draft-model` exists; no second dataset |
+| Reusability (2nd dataset) | 8 | **strong (verified offline)** | Chinook dataset (MIT, pinned), DDL setup, loader, semantic model (role-playing employee/manager, many-to-many playlist_track), 22-item eval set with 100% verified gold SQL, tests/test_chinook.py |
 | UX | 8 | ok (unreviewed) | Streamlit evidence tabs; never run live |
 Common rubric (30%): not mapped — its criteria aren't in CLAUDE.md; needs the guide.
 
