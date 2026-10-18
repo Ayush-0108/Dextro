@@ -286,6 +286,25 @@ def test_percent_from_fraction_and_dates():
     assert [c.status for c in checks] == ["verified", "verified"]
 
 
+def test_multipliers_and_ranges_are_checked():
+    s = statuses("VIETNAM had 1.17x JAPAN's revenue; 9.9x is made up.")
+    assert s["1.17x"] == "derived" and s["9.9x"] == "unverified"
+    checks = check_numbers("Revenue grew between 1994-1997.", ["year", "revenue"], [(1994, 1.0), (1996, 2.0)])
+    assert [(c.text, c.status) for c in checks] == [("1994", "verified"), ("1997", "unverified")]
+
+
+def test_phone_numbers_are_not_ranges():
+    assert statuses("Call 25-989-741-2988.") == {}
+
+
+def test_cross_row_cross_column_pairs_are_not_derived():
+    # 2 nations x (revenue, orders): revenue of row 1 / orders of row 2 is meaningless
+    checks = check_numbers("Ratio 2,500.", ["nation", "revenue", "orders"], [("A", 5000.0, 4.0), ("B", 3000.0, 2.0)])
+    assert checks[0].status == "unverified"
+    checks = check_numbers("A made 1,250 per order.", ["nation", "revenue", "orders"], [("A", 5000.0, 4.0), ("B", 3000.0, 2.0)])
+    assert checks[0].status == "derived"
+
+
 # ------------------------------------------------------------------ explanations
 def test_explanation_reflects_sql(model):
     c = compile_plan(QueryPlan.model_validate({

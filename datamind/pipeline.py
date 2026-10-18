@@ -342,7 +342,9 @@ class DataMind:
                                      "summary": summarize_rows(c.result.columns, c.result.rows)})  # type: ignore[union-attr]
 
     def _narrate(self, ans: Answer, q: str, res: QueryResult) -> None:
-        context = [ans.question, q, res.sql, *ans.assumptions]
+        # only the executed SQL is trusted context: numbers that appear only in the question or in model-written
+        # assumptions must be found in the rows, or a leading question could verify its own premise
+        context = [res.sql]
         feedback = None
         for attempt in range(2):
             system, prompt = narrate_prompt(q, ans.explanation, ans.assumptions, res.columns, res.rows,

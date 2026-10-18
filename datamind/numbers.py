@@ -3,8 +3,11 @@
 The narrator (Gemma) writes a short plain-language answer from the query result. This module
 extracts every number and date from that text and checks it against the rows. A number is:
   verified   - matches a result cell (we keep the row/column so the UI can highlight it)
-  derived    - equals a simple difference / ratio / percent change / share / total of result cells
-  context    - comes from the question, the executed SQL, or the shape of the result (row count)
+  derived    - equals a simple difference / ratio / percent change between two cells of the same column or
+               the same row, or a column's total, average or share
+  context    - appears in the executed SQL (filters, limits, date parts) or is the shape of the result (row count).
+               Numbers that appear only in the user's question are NOT context: a leading question
+               ("was revenue 300 million?") must not be able to verify its own premise.
   unverified - none of the above: the pipeline regenerates or falls back to a templated answer
 """
 from __future__ import annotations
@@ -23,11 +26,12 @@ _SCALE = {
     "billion": 1e9, "lakh": 1e5, "lakhs": 1e5, "crore": 1e7, "crores": 1e7, "cr": 1e7,
 }
 _DATE = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)")
+_RANGE = re.compile(r"(?<![\w#.-])(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)(?![\w-]|\.\d)")
 _NUM = re.compile(
     r"(?<![\w.#/-])(?P<sign>[-−])?(?P<cur>[$₹€£])?\s?"
     r"(?P<num>\d{1,3}(?:,\d{2,3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
     r"(?:\s?(?P<unit>%|percent(?!\w)|per\s?cent(?!\w)|thousand(?!\w)|million(?!\w)|billion(?!\w)|"
-    r"lakhs?(?!\w)|crores?(?!\w)|mn(?!\w)|bn(?!\w)|cr(?!\w)|[kKMB](?![\w]))|(?![\w]))"
+    r"lakhs?(?!\w)|crores?(?!\w)|mn(?!\w)|bn(?!\w)|cr(?!\w)|[kKMB](?![\w])|[x×](?![\w]))|(?![\w]|-\d))"
 )
 
 
@@ -54,6 +58,8 @@ def parse_numbers(text: str) -> list[tuple[str, float, float, bool, int, int]]:
     """Return (raw, value, tolerance, is_percent, start, end) for each number in text."""
     out = []
     masked = _DATE.sub(lambda m: " " * len(m.group(0)), text)
+    # ranges like 1994-1996 or 10-20: check both ends (phone numbers like 25-989-741-2988 are not ranges)
+    masked = _RANGE.sub(lambda m: m.group(1) + " " + m.group(2), masked)
     for m in _NUM.finditer(masked):
         raw_num = m.group("num")
         unit = (m.group("unit") or "").strip().lower().replace(" ", "")
@@ -62,7 +68,7 @@ def parse_numbers(text: str) -> list[tuple[str, float, float, bool, int, int]]:
         decimals = len(digits.split(".")[1]) if "." in digits else 0
         scale = 1.0
         is_pct = unit in ("%", "percent", "percent")
-        if unit and not is_pct:
+        if unit and not is_pct and unit not in ("x", "×"):
             scale = _SCALE.get(unit, 1.0)
         if m.group("sign"):
             value = -value
@@ -104,19 +110,27 @@ def check_numbers(text: str, columns: Sequence[str], rows: Sequence[Sequence[Any
     for c, vs in by_col.items():
         derived.append((sum(vs), f"total of {c}"))
         derived.append((sum(vs) / len(vs), f"average of {c}"))
-    if len(nums) <= 60:
-        for (a, ra, ca), (b, rb, cb) in itertools.permutations(nums, 2):
+    # pairwise comparisons only where they mean something: rows of the same column (e.g. this year vs last
+    # year) or columns of the same row (e.g. revenue vs cost). Cross pairs would make random numbers "derived".
+    groups: dict[tuple[str, Any], list[tuple[float, int, str]]] = {}
+    for f, ri, c in nums:
+        groups.setdefault(("col", c), []).append((f, ri, c))
+        groups.setdefault(("row", ri), []).append((f, ri, c))
+    for members in groups.values():
+        if len(members) > 60:
+            continue
+        for (a, ra, ca), (b, rb, cb) in itertools.permutations(members, 2):
             derived += [
                 (a - b, f"difference of row {ra + 1} {ca} and row {rb + 1} {cb}"),
                 (a / b, f"ratio of row {ra + 1} {ca} to row {rb + 1} {cb}"),
                 ((a - b) / abs(b) * 100, f"percent change from row {rb + 1} {cb} to row {ra + 1} {ca}"),
                 (a / b * 100, f"row {ra + 1} {ca} as a percent of row {rb + 1} {cb}"),
             ]
-        for c, vs in by_col.items():
-            tot = sum(vs)
-            if tot:
-                for ri, v in enumerate(vs):
-                    derived.append((v / tot * 100, f"share of row {ri + 1} in total {c}"))
+    for c, vs in by_col.items():
+        tot = sum(vs)
+        if tot and len(vs) <= 1000:
+            for ri, v in enumerate(vs):
+                derived.append((v / tot * 100, f"share of row {ri + 1} in total {c}"))
 
     checks: list[NumberCheck] = []
     # ISO dates in the text

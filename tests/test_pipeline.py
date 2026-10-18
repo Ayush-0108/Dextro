@@ -81,6 +81,15 @@ def test_unverifiable_narration_falls_back_to_template(model, duck):
     assert all(c.status in ("verified", "context") for c in a.number_checks)
 
 
+def test_leading_question_cannot_verify_its_own_number(model, duck):
+    def lying(task, prompt, opts):
+        if task == "narrate":
+            return "Yes, revenue was 300 million."
+        return make().handler(task, prompt, opts)
+    a = agent(model, duck, ScriptedLLM(lying)).ask("Was revenue 300 million in 1994?")
+    assert a.narration == "fallback" and "300 million" not in a.message
+
+
 def test_write_requests_never_reach_the_model(model, duck):
     llm = make()
     a = agent(model, duck, llm).ask("Delete all orders from 1992")
