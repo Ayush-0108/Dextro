@@ -90,6 +90,38 @@ def test_leading_question_cannot_verify_its_own_number(model, duck):
     assert a.narration == "fallback" and "300 million" not in a.message
 
 
+def test_empty_agreement_is_not_high_confidence(model, duck):
+    empty_plan = {**PLAN, "filters": [PLAN["filters"][0], {"field": "orders.o_orderdate", "op": "=", "value": 2005,
+                                                          "grain": "year"}]}
+    empty_sql = GOOD_SQL.replace("'1994-01-01'", "'2005-01-01'").replace("'1995-01-01'", "'2006-01-01'")
+
+    def handler(task, prompt, opts):
+        if task == "plan":
+            return json.dumps(empty_plan)
+        if task in ("sql", "sql_alt"):
+            return empty_sql
+        return make().handler(task, prompt, opts)
+    a = agent(model, duck, ScriptedLLM(handler)).ask("Top Asian nations by revenue in 2005")
+    assert a.status == "empty" and a.confidence == "medium"
+    assert "2005" in a.message and "Kept only rows where" in a.message
+
+
+def test_masked_aggregate_is_reported_as_masked(model, duck):
+    masked_sql = ("```sql\nSELECT AVG(CASE WHEN 1 = 0 THEN c.c_acctbal END) AS avg_balance "
+                  "FROM DATAMIND_DB.TPCH.CUSTOMER c\n```")
+
+    def handler(task, prompt, opts):
+        if task == "plan":
+            return json.dumps({"plan": None, "reason": "x"})
+        if task in ("sql", "sql_alt"):
+            return masked_sql
+        if task == "narrate":
+            return "The average balance is not available."
+        return make().handler(task, prompt, opts)
+    a = agent(model, duck, ScriptedLLM(handler)).ask("average customer balance")
+    assert "masked" in a.message and "avg_balance" in a.message
+
+
 def test_write_requests_never_reach_the_model(model, duck):
     llm = make()
     a = agent(model, duck, llm).ask("Delete all orders from 1992")

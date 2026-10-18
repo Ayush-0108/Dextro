@@ -22,7 +22,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
+import sqlglot
 from pydantic import ValidationError
+from sqlglot import exp
 
 from .compare import results_match, summarize_rows
 from .executors import QueryResult
@@ -201,11 +203,18 @@ class DataMind:
         assert res is not None
         ans.assumptions += [n for n in ans.chosen.notes if n not in ans.assumptions]
         ans.explanation = explain_sql(ans.chosen.sql or "", self.model)
-        masked = self._masked_columns(res)
+        masked = self._masked_columns(res, ans.chosen.sql or "")
         if res.row_count == 0:
             ans.status = "empty"
+            if ans.confidence == "high":
+                # agreeing on "nothing found" is weak evidence: a filter value that doesn't occur in the data
+                # makes every candidate return zero rows
+                ans.confidence = "medium"
+                ans.agreement += " An empty result can also mean a filter value doesn't occur in the data."
+            filters = next((s for s in ans.explanation if s.startswith("Kept only rows where")), "")
             ans.message = ("No rows matched this question, so there is nothing to report. "
-                           f"Check the filters in “How this was computed”. {self.model.data_coverage.strip()}")
+                           + (f"{filters} " if filters else "Check the filters in “How this was computed”. ")
+                           + self.model.data_coverage.strip())
             return
         ans.status = "answered"
         t = time.time()
@@ -363,12 +372,23 @@ class DataMind:
         ans.number_checks = check_numbers(ans.message, res.columns, res.rows, context)
         ans.narration = "fallback"
 
-    def _masked_columns(self, res: QueryResult) -> list[str]:
+    def _masked_columns(self, res: QueryResult, sql: str) -> list[str]:
+        """Result columns whose values are hidden by a masking policy.
+
+        A masked column comes back as NULL or a '***' string. Besides columns named like a sensitive column,
+        this catches aggregates over one (AVG(c_acctbal) is NULL when every balance is masked).
+        """
         sensitive = {c.name.lower() for e in self.model.entities for c in e.columns if c.sensitive}
+        try:
+            used = {c.name.lower() for c in sqlglot.parse_one(sql, read="snowflake").find_all(exp.Column)}
+        except sqlglot.errors.ParseError:
+            used = set()
+        touches_sensitive = bool(used & sensitive)
         out = []
         for i, col in enumerate(res.columns):
             vals = [r[i] for r in res.rows]
-            if col.lower() in sensitive and vals and all(v is None or (isinstance(v, str) and "*" in v) for v in vals):
+            if (col.lower() in sensitive or touches_sensitive) and vals and \
+                    all(v is None or (isinstance(v, str) and "*" in v) for v in vals):
                 out.append(col)
         return out
 
