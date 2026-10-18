@@ -78,3 +78,16 @@ def test_placeholders_count_as_missing():
     from make_env import missing_values
     assert missing_values("SNOWFLAKE_ACCOUNT=myorg-myaccount\nSNOWFLAKE_USER=your_login_name\n") == [
         "SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD", "GEMINI_API_KEY"]
+
+
+def test_script_runs_standalone(tmp_path):
+    # run exactly as a user would, from outside the repo, so only scripts/ is on the path
+    import subprocess
+    import sys
+    from pathlib import Path
+    script = Path(__file__).resolve().parent.parent / "scripts" / "make_env.py"
+    code = (f"import runpy, sys; sys.argv = ['make_env.py']; "
+            f"g = runpy.run_path({str(script)!r}, run_name='not_main'); print(g['missing_values']('X=1'))")
+    r = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "SNOWFLAKE_PASSWORD" in r.stdout

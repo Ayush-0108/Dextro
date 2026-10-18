@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))   # run as a script, only scripts/ would be importable
 
 
 def normalize_account(raw: str) -> str:
