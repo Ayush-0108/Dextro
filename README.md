@@ -1,6 +1,6 @@
 # DataMind â€” verified answers from your Snowflake data
 
-[![tests](https://github.com/Kanhaiya76618/datamind/actions/workflows/tests.yml/badge.svg)](https://github.com/Kanhaiya76618/datamind/actions/workflows/tests.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![tests](https://github.com/ZERODAY-2026/Dextro/actions/workflows/tests.yml/badge.svg)](https://github.com/ZERODAY-2026/Dextro/actions/workflows/tests.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Ask a question in plain English. DataMind answers it **by running SQL in Snowflake**, cross-checks the answer
 with an independently generated second query, explains exactly what ran, and shows the query, the rows and
@@ -61,7 +61,7 @@ Prerequisites: Python 3.11+, a Snowflake account (the free 30-day trial works â€
 sign-up), and a free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) (or Ollama locally).
 
 ```bash
-git clone <this repo> && cd datamind
+git clone https://github.com/ZERODAY-2026/Dextro.git && cd Dextro
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
