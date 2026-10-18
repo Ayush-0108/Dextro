@@ -37,7 +37,7 @@ _SINGULAR_SUBJECT = re.compile(r"\b(?:which|what)\s+((?:[a-z]+\s+){0,2}?[a-z]+)\
                                r"supplied|generated|made|sold|bought|shipped|received|earned|spent|ordered|"
                                r"contributed|brought)\b|^\s*who\s+(?:had|has|was|is|placed|supplied|generated|made|"
                                r"sold|bought|shipped|received|earned|spent|ordered)\b", re.I)
-_PERIOD_BREAKDOWN = re.compile(r"\b(?:each|every|per|by)\s+(quarter|month|week|year)\b"
+_PERIOD_BREAKDOWN = re.compile(r"\b(?:each|every|per|by)\s+(?:[a-z]+\s+)?(quarter|month|week|year)\b"
                                r"|\b(quarterly|monthly|weekly|yearly|annually)\b", re.I)
 _TIME_UNIT = re.compile(r"^\s*(?:day|week|month|quarter|year|hour|minute)s?\b", re.I)
 # category values that are also everyday words in questions ("ship mode", "high priority")
@@ -116,6 +116,18 @@ def question_constraints(question: str, model: SemanticModel) -> Constraints:
     return cons
 
 
+def _sorted(sql: str) -> bool:
+    """True if the query's final result has an ORDER BY."""
+    try:
+        tree = sqlglot.parse_one(sql, read="snowflake")
+    except sqlglot.errors.ParseError:
+        return True   # can't tell: don't flag
+    frm = tree.args.get("from_") or tree.args.get("from")
+    if isinstance(tree, exp.Select) and frm is not None and isinstance(frm.this, exp.Subquery) and frm.this.alias == "_q":
+        tree = frm.this.this     # the validator's row-cap wrapper around a UNION
+    return tree.args.get("order") is not None
+
+
 def _sql_numbers(sql: str) -> set[float]:
     return {float(x) for x in _SQL_NUMBER.findall(sql)}
 
@@ -150,6 +162,9 @@ def check_candidate(cons: Constraints, sql: str, result: QueryResult | None) -> 
             issues.append(f"the question asks for a single number but the query returned {n} rows")
         if cons.period_breakdown and n == 1:
             issues.append(f"the question asks for a breakdown by {cons.period_breakdown} but the query returned 1 row")
+        if cons.period_breakdown and n > 1 and not _sorted(sql):
+            issues.append(f"the question asks for a breakdown by {cons.period_breakdown} but the rows are not sorted "
+                          f"(add ORDER BY the {cons.period_breakdown})")
     return issues
 
 
@@ -203,4 +218,6 @@ def coverage_report(cons: Constraints, sql: str, result: QueryResult | None) -> 
         grouped = any(name == "GROUP BY" for name, _ in clauses)
         items.append({"asked": f"one row per {cons.period_breakdown}", "found": n is not None and n > 1,
                       "where": ("GROUP BY, " if grouped else "") + rows})
+        items.append({"asked": f"in {cons.period_breakdown} order", "found": _sorted(sql),
+                      "where": "ORDER BY" if _sorted(sql) else ""})
     return items

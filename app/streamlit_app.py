@@ -166,6 +166,7 @@ def chart(df: pd.DataFrame) -> None:
         return
     is_time = bool(timeish.search(str(x))) or pd.api.types.is_datetime64_any_dtype(df[x])
     if is_time:
+        df = df.sort_values(x)          # a time axis is drawn in time order whatever order the rows came in
         plot = px.line(df, x=x, y=y, markers=True)
         plot.update_traces(line_color="#059669", marker_color="#059669")
     else:

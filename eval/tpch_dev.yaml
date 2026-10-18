@@ -460,6 +460,7 @@ items:
       SELECT YEAR(orders.o_orderdate) AS order_year, COUNT(*) AS order_count
       FROM DATAMIND_DB.TPCH.ORDERS AS orders
       GROUP BY YEAR(orders.o_orderdate)
+      ORDER BY order_year
 
   - id: t02
     tier: time

@@ -111,7 +111,7 @@ def test_period_breakdown_needs_more_than_one_row(model):
     c = question_constraints("What was revenue in each quarter of 1996?", model)
     assert c.period_breakdown == "quarter"
     assert "breakdown by quarter" in check_candidate(c, "SELECT 1 /* 1996 */", rows(1))[0]
-    assert check_candidate(c, "SELECT 1 /* 1996 */", rows(4)) == []
+    assert check_candidate(c, "SELECT 1 /* 1996 */ ORDER BY 1", rows(4)) == []
     assert question_constraints("Show monthly order counts for 1997", model).period_breakdown == "month"
     assert question_constraints("How many orders were placed in 1997?", model).period_breakdown is None
 
@@ -161,3 +161,10 @@ def test_a_full_ranking_for_a_singular_superlative_is_flagged(model):
     c = question_constraints("Which supplier nation supplied the most units for orders placed in 1994?", model)
     assert "a single top result" in check_candidate(c, "SELECT 1 /* 1994 */", rows(25))[0]
     assert check_candidate(c, "SELECT 1 /* 1994 */ LIMIT 1", rows(1)) == []
+
+
+def test_period_breakdown_must_be_sorted(model):
+    c = question_constraints("For each order year, what fraction of line items were late?", model)
+    unsorted = "SELECT YEAR(o.o_orderdate) AS y, AVG(x) FROM t GROUP BY 1"
+    assert any("not sorted" in i for i in check_candidate(c, unsorted, rows(7)))
+    assert check_candidate(c, unsorted + " ORDER BY 1", rows(7)) == []
