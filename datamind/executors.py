@@ -89,6 +89,8 @@ class SnowflakeExecutor:
             "application": "DataMind",
             # keep the session alive while the app sits idle during judging
             "client_session_keep_alive": True,
+            # we only run synchronous queries, so a plain logout on close is right (also silences a FutureWarning)
+            "enable_server_session_keep_alive_auto_detection": False,
         }
         pk_file = private_key_file or os.getenv("SNOWFLAKE_PRIVATE_KEY_FILE")
         pw = password or os.getenv("SNOWFLAKE_PASSWORD")

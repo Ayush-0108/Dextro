@@ -58,6 +58,7 @@ def test_reconnects_once_when_the_session_expired(fake_connect):
     r = executor().run("SELECT 1")
     assert r.ok and r.rows == [(1,)] and len(fake_connect) == 2 and fake_connect[0].closed
     assert fake_connect[1].params["client_session_keep_alive"] is True
+    assert fake_connect[1].params["enable_server_session_keep_alive_auto_detection"] is False
     assert fake_connect[1].log[0] == "USE SECONDARY ROLES NONE"
 
 
