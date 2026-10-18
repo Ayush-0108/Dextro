@@ -8,24 +8,20 @@ _Last updated: 2026-10-18 (end of session 2). Team repo: https://github.com/ZERO
 - **Snowflake trial (live, run by Kanhaiya in Snowsight as ACCOUNTADMIN):** region AWS_AP_SOUTH_1; masking policy
   created → **Enterprise edition or higher**; SNOWFLAKE_SAMPLE_DATA present, TPCH_SF1.ORDERS = 1,500,000 rows;
   test database dropped. Owner user: TYPE null, has_password true, has_mfa false → app uses its own key-pair user.
+- **`snowflake/01_setup.sql` executed live:** Roles `DATAMIND_ADMIN`, `DATAMIND_AGENT`, and `DATAMIND_RESTRICTED`
+  created and verified. `DATAMIND_DB.TPCH` tables verified: `LINEITEM = 6001215`, `ORDERS = 1500000`, `CUSTOMER = 150000`.
+- **Connectivity check live:** `python -m datamind check` passed with Snowflake lineitem count `6001215` and Gemma reply `ready`.
+- **`check-gold --independent duckdb` live:** All 52 gold queries executed on Snowflake and matched 100% on DuckDB SF1.
+- **Local Ollama Gemma model:** `gemma4:12b` (7.7 GB) running on local Ollama server (`http://localhost:11434`).
+- **Smoke test live:** First live eval item (`tpch_dev.yaml` s01) passed 100% (high confidence), latency 217.8s.
 - **Repo hygiene:** no `.env`, keys, `CLAUDE.local.md`, `private/` or data in git; account identifier and login
   name absent from the whole history (checked before pushing).
-- **Local Ollama Gemma model:** `gemma4:12b` (7.7 GB) downloaded and verified via `ollama list`.
 
-## Not verified
-- `snowflake/01_setup.sql` has **not** been run (no DATAMIND_DB, roles, masking policies or DATAMIND_APP yet).
-- Sign-in: quick start is now password on the trial (exempt from Snowflake's MFA rollout, per Snowflake docs);
-  key pair for `DATAMIND_APP` is optional. Neither has been tried against the live account yet.
-- No `.env`: `python -m datamind check` fails on both sides (`SNOWFLAKE_ACCOUNT` missing; `GEMINI_API_KEY` missing).
-- Gemma has **never** been called live. Defaults: `GEMMA_BACKEND=api`, `GEMMA_MODEL=gemma-4-31b-it`. Google's docs list
-  that id, `system_instruction` and `thinking_level` high/minimal, matching our client; free-tier rate limits are
-  unknown until the first eval, which now records requests, 429s, waits and latency (audit C5). Local fallback:
-  Ollama `gemma4:12b` (downloaded and ready).
-- No eval has been run against Snowflake + Gemma. No accuracy numbers exist. No hold-out file exists.
-- `check-gold` against Snowflake not run (gold SQL only verified on DuckDB, two scales).
+## Not verified / Pending
+- `snowflake/10_chinook_setup.sql` needs to be run in Snowsight as `ACCOUNTADMIN`, followed by `scripts/load_chinook.py`.
+- Full eval baseline across all 52 dev queries and Chinook dev queries (local Ollama takes ~218s/question; candidate for Google AI Studio API key).
 - Streamlit app not opened against live services.
-- Participant guide PDF not read: `private/` does not exist on this Mac (checked 2026-10-18, session 3). Rubric
-  below comes from `CLAUDE.md`'s summary; common rubric C1–C8, gates and S1–S10 not re-mapped yet.
+- Participant guide PDF not read: `private/` does not exist on this Mac. Rubric below comes from `CLAUDE.md`'s summary.
 
 ## Done (commits, oldest first)
 | Commit | What | Why |
@@ -76,16 +72,16 @@ Common rubric (30%): not mapped — its criteria aren't in CLAUDE.md; needs the 
 - Rubric unverified against the guide; common criteria unmapped.
 
 ## Next (in order)
-1. Run `01_setup.sql` (expect 6001215 / 1500000 / 150000), then `.env` with password sign-in.
-2. Gemini key → `python -m datamind check`; then `check-gold --independent duckdb`.
-3. First `python -m datamind eval` baseline; triage; log numbers below.
+1. Run `snowflake/10_chinook_setup.sql` in Snowsight as ACCOUNTADMIN, then run `scripts/load_chinook.py`.
+2. Evaluate speed options: local Ollama (`gemma4:12b` at ~218s/question) vs. Google AI Studio API (`gemma-4-31b-it` at ~5s/question).
+3. Run full baseline eval (`python -m datamind eval --paraphrases` and Chinook eval) and triage any failures.
 
 ## Open questions (ask Kanhaiya)
 - Deadline and judging dates? Team members/roles; who writes the hold-out set?
-- Save the guide PDF into `~/DataMind/private/` (folder doesn't exist yet), then map C1–C8, G1–G5/P1–P3, S1–S10.
-- Second dataset (Phase 4).
+- Run `snowflake/10_chinook_setup.sql` in Snowsight?
+- Should we switch to Gemini/AI Studio API key for `gemma-4-31b-it` to run the 52+ item evaluation in minutes instead of hours?
 
 ## Eval results log
 | Date | Model | Split | Overall | Notes |
 |---|---|---|---|---|
-| – | – | – | – | no run yet |
+| 2026-10-18 | ollama:gemma4:12b | dev (smoke 1 item) | 1/1 (100%) | Latency 217.8s, high confidence, 4 model calls |
