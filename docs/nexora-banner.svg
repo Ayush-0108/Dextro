@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 210" role="img" aria-labelledby="title">
+  <title id="title">NEXORA</title>
+  <defs>
+    <linearGradient id="gold" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffe000"/>
+      <stop offset=".55" stop-color="#ffc400"/>
+      <stop offset=".551" stop-color="#f49a19"/>
+      <stop offset="1" stop-color="#c86d24"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="210" fill="#111"/>
+  <g font-family="Impact, 'Arial Black', sans-serif" font-size="164" font-weight="900" letter-spacing="5">
+    <text x="47" y="170" textLength="1110" lengthAdjust="spacingAndGlyphs" fill="none" stroke="#713b17" stroke-width="13">NEXORA</text>
+    <text x="40" y="160" textLength="1110" lengthAdjust="spacingAndGlyphs" fill="none" stroke="#a95719" stroke-width="8">NEXORA</text>
+    <text x="32" y="150" textLength="1110" lengthAdjust="spacingAndGlyphs" fill="url(#gold)" stroke="#542d16" stroke-width="3">NEXORA</text>
+  </g>
+</svg>

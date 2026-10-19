@@ -1,4 +1,6 @@
-# NEXORA
+<h1 align="center">
+  <img src="docs/nexora-banner.svg" alt="NEXORA" width="100%">
+</h1>
 
 ## Verified AI Data Analyst
 
