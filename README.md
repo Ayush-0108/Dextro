@@ -1,10 +1,14 @@
-# Nexora — Verified AI Data Analyst
+# NEXORA
+
+## Verified AI Data Analyst
 
 **Verified answers from your Snowflake data.** Nexora is an AI-powered data analyst built by **Dextro** for the ZeroDay OSS Hacktoberfest 2026 PS1 "Talk to Your Data" track.
 
 Ask a question in plain English. Nexora answers it by running SQL in Snowflake, cross-checks the result with an independently generated query, explains what ran, and shows the SQL, result rows, and Snowflake query ID behind every answer. When it cannot be sure, it says so.
 
 > **Nexora — Ask your data. Verify every answer.**
+
+> **Evaluation accuracy:** 94% (62/66) on the 66-question dev set; **95% target**. See the [evaluation report](eval/reports/eval_20261018T170227.md).
 
 Built with **Snowflake Enterprise** and **Google Gemma**, with local Ollama inference for a reproducible setup without paid API requirements.
 
